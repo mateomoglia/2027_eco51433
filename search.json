@@ -1,0 +1,512 @@
+[
+  {
+    "objectID": "part5_debug.html",
+    "href": "part5_debug.html",
+    "title": "Debugging clinic",
+    "section": "",
+    "text": "Errors are a normal part of programming. This part presents a method to diagnose them, the most frequent error messages in Stata, and the organisation of a project that can be reproduced by a third party.",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#read-the-error-message",
+    "href": "part5_debug.html#read-the-error-message",
+    "title": "Debugging clinic",
+    "section": "Read the error message",
+    "text": "Read the error message\nWhen a command fails, Stata prints a message in red followed by a return code, for instance r(111). The execution of the do-file stops at this line. The message and the code identify the problem.\n\n\n\n\n\n\n\n\nCode\nMessage\nFrequent cause\n\n\n\n\nr(3)\nno dataset in use\nNo data loaded, or clear all executed before the command\n\n\nr(9)\nassertion is false\nA check written with assert failed\n\n\nr(100)\nvarlist required\nA command requiring variables receives an empty list, for instance from an empty local macro\n\n\nr(109)\ntype mismatch\nA string variable is compared with a number, or the reverse\n\n\nr(110)\nvariable already defined\ngenerate used on an existing name. Use replace or capture drop\n\n\nr(111)\nvariable not found\nTypo, wrong case (Stata is case sensitive), wrong dataset in memory\n\n\nr(198)\ninvalid syntax\nMissing comma, misspelt option, unbalanced parenthesis or quotation mark\n\n\nr(199)\nunrecognized command\nMisspelt command, or package not installed\n\n\nr(459)\nvariable does not uniquely identify observations\nFailed isid or merge on a key with duplicates\n\n\nr(601)\nfile not found\nWrong path or file name\n\n\nr(602)\nfile already exists\nsave or export without the option replace\n\n\nr(2000)\nno observations\nThe if condition selects nothing\n\n\n\nThe description of a return code is obtained with search r(111).",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#a-method",
+    "href": "part5_debug.html#a-method",
+    "title": "Debugging clinic",
+    "section": "A method",
+    "text": "A method\n\nRead the message and identify the line that failed\nIsolate the problem. Execute the code line by line and comment out what is not needed\nInspect the state of the data at the point of failure, with describe, list in 1/5, summarize, tabulate, missing or display\nSimplify. Reproduce the error on a built-in dataset, with the smallest possible code\nTrace. When the error is inside a loop or a program, set trace on prints each line executed and set trace off stops it. The option set tracedepth 1 limits the level of detail\nSearch in the documentation with help and search. Then look for the exact message online, for instance on Statalist\n\n* Inspect the value of a local inside a loop\nforeach v of varlist price mpg {\n    display \"Current variable: `v'\"\n    summarize `v'\n}\n\ncapture\nThe prefix capture suppresses the error and stores its return code in _rc.\ncapture confirm variable price\nif _rc != 0 {\n    display \"The variable price does not exist\"\n}\ncapture is appropriate when a failure is expected, for instance capture drop varname before a generate. It should not be used to silence errors that are not understood, since the code then continues on a wrong state.",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#silent-errors",
+    "href": "part5_debug.html#silent-errors",
+    "title": "Debugging clinic",
+    "section": "Silent errors",
+    "text": "Silent errors\nThe most dangerous errors do not produce any message. The result is wrong but the code runs. The following are the most frequent.\n\nMissing values treated as large numbers in comparisons (see Part 0 and Part 1)\nA local macro that is empty, so that summarize `vars' summarises all variables\nA merge that does not match all observations, or m:m\nA replace with a condition that is more general than intended\nA sample that changes between two regressions because of missing values. The number of observations should be compared across columns of a table\n\nSystematic checks limit these risks: assert, isid, count, tabulate, missing, misstable summarize.",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#exercise",
+    "href": "part5_debug.html#exercise",
+    "title": "Debugging clinic",
+    "section": "Exercise",
+    "text": "Exercise\nEach block below contains one error. For each of them, predict the message, run the code and correct it.\n\n\n\n\n\n\nTipExercise\n\n\n\n* Block 1\nsysuse auto, clear\nregress price Mpg\n\n* Block 2\nsummarize price, detials\n\n* Block 3\ngenerate price = price / 1000\n\n* Block 4\nkeep if foreign == \"Foreign\"\n\n* Block 5\nsave \"$path/temp/auto_clean.dta\"\nsave \"$path/temp/auto_clean.dta\"\n\n* Block 6 (no error message: what is wrong?)\nsysuse auto, clear\ngenerate good_record = rep78 &gt; 3\ntabulate good_record rep78, missing\n\n* Block 7 (run the two lines separately: what is wrong?)\nlocal vars price mpg\nsummarize `vars'\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\n\nr(111). The variable is mpg. Stata is case sensitive\nr(198). The option is detail\nr(110). The variable price exists. Use a new name or replace\nr(109). The variable foreign is numeric. The condition is foreign == 1. The label is printed by tabulate but is not the value\nr(602) at the second line. Add the option replace\nThe variable rep78 has missing values, which are coded as larger than 3. The observations with a missing repair record are assigned good_record = 1. The correct code is generate good_record = rep78 &gt; 3 if !missing(rep78)\nWhen the lines are executed separately, the local vars does not exist in the second execution. The command summarize with an empty list summarises all the variables and no error is displayed",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#reproducibility",
+    "href": "part5_debug.html#reproducibility",
+    "title": "Debugging clinic",
+    "section": "Reproducibility",
+    "text": "Reproducibility\nA project is reproducible if a third party can obtain all the results from the raw data, by running one file. This is required by most economics journals and is, above all, the best protection for the author against errors.\n\nMaster do-file\nThe master do-file defines the environment, installs the packages and runs the scripts in order. It is the only file that has to be modified to run the project on another computer.\n/*==========================================================================\n    MASTER DO-FILE\n    Project : Introduction to Stata\n    Purpose : Run all the scripts in order\n==========================================================================*/\n\nclear all\nset more off\nset varabbrev off\nversion 17                 // Oldest version supported. It must not exceed the installed one\ncapture log close\n\n* ===== 1. Paths =====\n\n* The only lines to modify: one line per user\nif \"`c(username)'\" == \"mmoglia\" {\n    global path \"C:/Users/mmoglia/courses/2026_eco51423ep\"\n}\nelse if \"`c(username)'\" == \"student\" {\n    global path \"C:/Users/student/courses/2026_eco51423ep\"\n}\n\nglobal code   \"$path/code\"\nglobal raw    \"$path/raw_data\"\nglobal temp   \"$path/temp\"\nglobal output \"$path/output\"\nglobal logs   \"$path/logs\"\n\n* ===== 2. Run =====\n\nlog using \"$logs/master.smcl\", replace\n\ndo \"$code/0_install_packages.do\"\ndo \"$code/1_clean_data.do\"\ndo \"$code/2_merge_datasets.do\"\ndo \"$code/3_analysis.do\"\n\nlog close\n\n\nRules\n\nAll paths are built from $path, none is written in full in the scripts\nThe raw data are never modified. Every transformation is performed by a script\nEach script starts from the data it needs and does not depend on the state left by another script in memory\nThe scripts are numbered in the order of execution\nRandomness is controlled with set seed. Commands involving random draws, such as sample, start from a sorted dataset, so that the result does not depend on the initial order\nThe installed packages and the version are documented (about, ado dir, which estout)\nA README file describes the folder structure, the sources of the data and the order of execution\n\nset seed 20260928\nsort id            // Requires a variable id\nsample 10          // Keep 10% of the observations",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part5_debug.html#further-resources",
+    "href": "part5_debug.html#further-resources",
+    "title": "Debugging clinic",
+    "section": "Further resources",
+    "text": "Further resources\n\nThe Stata documentation, accessible from help and in PDF\nStatalist, the reference forum. Search before posting\nThe Stata Journal and the Stata Tips\nThe DIME Analytics Data Handbook of the World Bank\nThe Library of Statistical Translation, which gives equivalent code in Stata, R and Python\nThe UCLA OARC Stata resources",
+    "crumbs": [
+      "Debugging clinic"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html",
+    "href": "part3_viz.html",
+    "title": "Data visualisation",
+    "section": "",
+    "text": "This part covers the main graph types in Stata. Part of the material is adapted from this Princeton tutorial. Variable names of the online datasets follow the original files and should be checked with describe.",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#general-remarks",
+    "href": "part3_viz.html#general-remarks",
+    "title": "Data visualisation",
+    "section": "General remarks",
+    "text": "General remarks\nThe standard syntax of a graph command is graph_command variable, options. Several plots are overlaid with twoway, for instance a bar chart and a line, or a scatter plot and a fitted line:\ntwoway (graph_command1 var1, options1) (graph_command2 var2, options2), general_options\ntwoway can be abbreviated tw. The options placed inside a parenthesis apply to one plot. The options placed after the last parenthesis apply to the whole graph.\nGood practice for graphs:\n\nLabel the axes with the variable and its unit\nInclude a legend when several series are shown, and omit it otherwise\nKeep one message per graph and limit the amount of information\nUse colours that remain readable in black and white and for colour-blind readers\n\n\nSchemes\nA scheme defines the general look of a graph. The list of official schemes is documented here. The package blindschemes adds schemes with colour-blind safe palettes, such as plotplain and plottig.\nssc install blindschemes, replace\nset scheme plotplain\n\n\nExport\nA graph is exported with graph export. The vector format .pdf is preferred for LaTeX documents.\ngraph export \"$path/output/figures/my_graph.pdf\", replace\ngraph export \"$path/output/figures/my_graph.png\", replace width(2000)",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#scatter-plots",
+    "href": "part3_viz.html#scatter-plots",
+    "title": "Data visualisation",
+    "section": "Scatter plots",
+    "text": "Scatter plots\nThe command is scatter, abbreviated sc. It requires two variables, y then x, in this order. We use trade data for the year 2012.\nuse \"https://dss.princeton.edu/training/wdipol.dta\", clear\nkeep if year == 2012\n\nscatter import export            // Levels: the graph is hardly readable\n\ngenerate limport = log(import)   // Logarithms improve readability\ngenerate lexport = log(export)\nWe now choose the colour, the symbol and the width of the symbol, and label the axes.\nscatter limport lexport, ///\n    mcolor(cranberry) msymbol(Oh) mlwidth(0.1) ///\n    xtitle(\"Exports (USD, log)\") ytitle(\"Imports (USD, log)\")\nThe same graph with abbreviated options:\nsc limport lexport, mc(cranberry) m(Oh) mlw(0.1) xti(\"Exports (USD, log)\") yti(\"Imports (USD, log)\")\nAbbreviations are convenient when exploring the data. Complete options are preferred in a do-file.\nMarkers can be labelled with the option mlabel(). The labels are readable only for a small number of observations.\nscatter limport lexport if inlist(country, \"France\", \"Germany\", \"Italy\", \"Spain\"), ///\n    mcolor(cranberry) mlabel(country) mlabposition(3)\n\n\n\n\n\n\nTipExercise\n\n\n\nStarting from the scatter plot of limport on lexport, add a regression line.\n\nOverlay a second plot with (lfit y x)\nGive the line the same colour as the points\nAdapt the legend with the option order(), and place it at the bottom\n\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\ntwoway (scatter limport lexport, mcolor(cranberry) msymbol(Oh) mlwidth(0.1)) ///\n       (lfit limport lexport, lcolor(cranberry)), ///\n    xtitle(\"Exports (USD, log)\") ytitle(\"Imports (USD, log)\") ///\n    legend(pos(6) cols(2) order(1 \"Countries\" 2 \"Linear fit\"))\nThe option pos(6) places the legend at 6 o’clock, that is, below the graph. The order of the plots in the command determines their number in order().",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#histograms-and-bar-charts",
+    "href": "part3_viz.html#histograms-and-bar-charts",
+    "title": "Data visualisation",
+    "section": "Histograms and bar charts",
+    "text": "Histograms and bar charts\n\nHistograms\nHistograms are produced with histogram, abbreviated hist. We use the full panel of countries.\nuse \"https://dss.princeton.edu/training/wdipol.dta\", clear\n\nhist gdppc\nhist gdppc, frequency\nhist gdppc, kdensity\nhist gdppc, kdensity normal\nThe legend of this latter graph is hardly customisable. Building the graph with twoway gives full control. The global histopts groups the options of the histogram.\nglobal histopts \"bin(20) fcolor(ebblue%60) lcolor(white)\"\n\nquietly summarize gdppc, detail\nlocal mu = r(mean)\nlocal sigma = r(sd)\nlocal lo = r(p1)\nlocal hi = r(p99)\n\ntwoway (hist gdppc, $histopts) ///\n       (kdensity gdppc, lcolor(cranberry)) ///\n       (function y = normalden(x, `mu', `sigma'), range(`lo' `hi') lcolor(navy)), ///\n    xtitle(\"GDP per capita (USD)\") ///\n    legend(pos(6) cols(2) order(2 \"Kernel density\" 3 \"Normal distribution\"))\nThe distributions of two groups are compared by overlaying two histograms, with the alternative || syntax of twoway. Here, we compare the distribution of GDP per capita across countries in 1990 and in 2012.\ntwoway hist gdppc if year == 1990, bin(10) || ///\n       hist gdppc if year == 2012, bin(10) fcolor(none) lcolor(red) ///\n    legend(label(1 \"1990\") label(2 \"2012\"))\n\n\nBar charts\nThe command graph bar (vertical) and graph hbar (horizontal) plot statistics of a variable. The syntax over() plots a statistic for each category of a variable.\nsysuse auto, clear\ngraph bar (mean) price, over(foreign)\nWe now plot the GDP per capita of the wealthier countries. The selection is based on the average over the period. A selection based on gdppc &gt; 18000 would instead select observations, not countries.\nuse \"https://dss.princeton.edu/training/wdipol.dta\", clear\n\nbysort country: egen gdppc_avg = mean(gdppc)\n\ngraph hbar (mean) gdppc if gdppc_avg &gt; 18000, ///\n    over(country, sort(1) descending label(labsize(*0.7))) ///\n    bar(1, color(ebblue))\n\ngraph hbar (mean) gdppc (median) gdppc if gdppc_avg &gt; 18000, ///\n    over(country, sort(1) descending label(labsize(*0.8))) ///\n    legend(label(1 \"Mean\") label(2 \"Median\")) ///\n    bar(1, color(navy)) bar(2, color(cranberry))",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#box-plots",
+    "href": "part3_viz.html#box-plots",
+    "title": "Data visualisation",
+    "section": "Box plots",
+    "text": "Box plots\ngenerate lgdppc = log(gdppc)\ngenerate ltrade = log(trade)\n\ngraph box lgdppc ltrade\n\n\n\n\n\n\nTipExercise\n\n\n\nMake a box plot with the variables of your choice, for instance the logarithm of imports and exports.\n\nRead carefully the help of graph box\nChange the colour of the two boxes\nChange the width of the graph with the options xsize() and ysize()\nPlace the legend below, on two columns\nAdd a title in bold, using the syntax {bf: text}",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#line-charts",
+    "href": "part3_viz.html#line-charts",
+    "title": "Data visualisation",
+    "section": "Line charts",
+    "text": "Line charts\nLine charts are appropriate for time series and panel data. The years are on the x-axis and the values on the y-axis. We use the built-in life expectancy dataset.\nsysuse uslifeexp, clear\n\nline le year                        // The variable on the y-axis is placed first\nline le_male le_female year         // Several series: the x variable is always last\nAn alternative uses scatter with the option connect().\nscatter le_male le_female year, connect(l l) msymbol(none none)\nWe improve the graph in three ways: the legend is placed inside the plot region, the lines are restyled and an annotation is added. We first change the legend and the titles.\nline le_male le_female year, ///\n    legend(ring(0) pos(5) region(lstyle(none))) ///\n    title(\"{bf:Life expectancy} in the 20th century\") ///\n    xtitle(\"Year\") ytitle(\"Years\") ///\n    note(\"Source: US Census Bureau\") ///\n    ylabel(, nogrid) xlabel(, nogrid)\nThe option ring(0) places the legend inside the plot region and pos(5) at 5 o’clock. The grid is removed by nogrid and the title is in bold thanks to {bf: }.\nThe lines are restyled with lcolor() and lpattern():\nline le_male le_female year, ///\n    lcolor(green cranberry) lpattern(longdash longdash_dot) ///\n    legend(ring(0) pos(5) region(lstyle(none))) ///\n    title(\"{bf:Life expectancy} in the 20th century\") ///\n    xtitle(\"Year\") ytitle(\"Years\") ///\n    note(\"Source: US Census Bureau\") ///\n    ylabel(, nogrid) xlabel(, nogrid)\nThe drop of life expectancy in 1918 is due to the Spanish flu. We add an arrow with pcarrowi y1 x1 y2 x2 (clockposition) \"label\". It goes from the point \\((x_1, y_1)\\) to the point \\((x_2, y_2)\\).\ntwoway (line le_male le_female year, ///\n            lcolor(green cranberry) lpattern(longdash longdash_dot)) ///\n       (pcarrowi 45 1930 40 1918 (2) \"Spanish flu\", ///\n            color(black) mlabcolor(black)), ///\n    legend(order(1 2) ring(0) pos(5) region(lstyle(none))) ///\n    title(\"{bf:Life expectancy} in the 20th century\") ///\n    xtitle(\"Year\") ytitle(\"Years\") ///\n    note(\"Source: US Census Bureau\") ///\n    ylabel(, nogrid) xlabel(, nogrid)\nThe option order(1 2) keeps only the two lines in the legend and excludes the arrow.",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#regression-coefficients",
+    "href": "part3_viz.html#regression-coefficients",
+    "title": "Data visualisation",
+    "section": "Regression coefficients",
+    "text": "Regression coefficients\nRegression coefficients are plotted with their confidence intervals using the package coefplot. Part of the material is adapted from this blog post.\nssc install coefplot, replace\nWe use the auto dataset. The variables are rescaled between 0 and 1, so that their coefficients are comparable. A loop avoids repeating the same code.\nsysuse auto, clear\n\nforeach v in mpg weight length {\n    quietly summarize `v'\n    generate `v'_01 = (`v' - r(min)) / (r(max) - r(min))\n}\nA standardised variable (mean 0 and standard deviation 1) is obtained with egen mpg_std = std(mpg).\nWe run a regression and plot its coefficients. coefplot uses the last estimation by default.\nregress price mpg_01 weight_01 length_01 i.foreign, vce(robust)\ncoefplot\n\n\n\n\n\n\nTip\n\n\n\nEstimates stored with eststo can be used directly: coefplot m1. They can be restored with estimates restore m1, which is also useful to access the e() results.\n\n\nThe graph is improved step by step. The names of the coefficients are printed by regress, coeflegend.\nregress, coeflegend      // Print the names to use in the options of coefplot\n\n* Vertical line at zero and removal of the constant\nglobal coefplotopts \"drop(_cons) xline(0, lcolor(red) lwidth(medium))\"\n\ncoefplot, $coefplotopts ///\n    coeflabels(mpg_01 = \"MPG\" weight_01 = \"Weight\" length_01 = \"Length\")\n\n* A more complete model\nregress price mpg_01 weight_01 length_01 i.foreign i.foreign#c.mpg_01, vce(robust)\n\ncoefplot, $coefplotopts ///\n    coeflabels(mpg_01 = \"MPG\" weight_01 = \"Weight\" length_01 = \"Length\" ///\n               1.foreign = \"Foreign\" 1.foreign#c.mpg_01 = \"MPG X Foreign\")\n\n* Final version\ncoefplot, $coefplotopts ///\n    xtitle(\"{bf:Effect on vehicle price (USD)}\") ///\n    graphregion(margin(medsmall)) ///\n    xlabel(, nogrid) ///\n    ylabel(, glpattern(dash) glcolor(gs14)) ///\n    coeflabels(mpg_01 = \"MPG\" length_01 = \"Length\" weight_01 = \"Weight\" ///\n               1.foreign = \"Foreign\" 1.foreign#c.mpg_01 = `\"\"MPG X\" \"Foreign\"\"') ///\n    headings(mpg_01 = \"{bf:Vehicle specs}\" ///\n             1.foreign = \"{bf:Production info}\" ///\n             1.foreign#c.mpg_01 = \"{bf:Interactions}\", gap(0))\nSeveral models are compared in the same graph. Each model is stored and passed in a parenthesis, with its own label.\neststo clear\neststo m1: regress price mpg_01 weight_01 length_01, vce(robust)\neststo m2: regress price mpg_01 weight_01 length_01 i.foreign, vce(robust)\n\ncoefplot (m1, label(\"Baseline\")) (m2, label(\"With origin\")), ///\n    keep(mpg_01 weight_01 length_01) xline(0) legend(pos(6) cols(2))\nThe confidence level is chosen with levels(), and several levels are plotted at once with levels(95 90).",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part3_viz.html#exercise-2",
+    "href": "part3_viz.html#exercise-2",
+    "title": "Data visualisation",
+    "section": "Exercise",
+    "text": "Exercise\nDoes trade orientation correlate with life expectancy? We use the dataset wdipol and a World Bank dataset on male life expectancy.\n\n\n\n\n\n\nTipExercise\n\n\n\nLife expectancy data\n\nDownload, save and open the World Bank dataset. The archive contains a .csv file with header lines. Open it with import delimited and inspect the first rows with browse\nKeep the country names and the variables whose name starts with v, except the last one, which is empty\nUsing a loop, rename the v variables into le_maleYYYY\nReshape to long format with a new column year\nSave as a temporary file\n\nHints for steps 1 to 4. The years are stored in the labels of the variables v. The following pieces of code can be adapted.\n* The row containing the column headers (here 5) must be checked in the file\nimport delimited \"$path/raw_data/API_SP.DYN.LE00.MA.IN.csv\", varnames(5) clear\nrename countryname country\n\nforeach v of varlist v* {\n    local yr : variable label `v'\n    if \"`yr'\" == \"\" drop `v'\n    else rename `v' le_male`yr'\n}\n\nreshape long le_male, i(country) j(year)\nBy now, the dataset should look as follows:\n. list in 1/10\n\n     +------------------------------+\n     |     country   year   le_male |\n     |------------------------------|\n  1. | Afghanistan   1960    32.136 |\n  2. | Afghanistan   1961    32.626 |\n  3. | Afghanistan   1962    33.098 |\n  4. | Afghanistan   1963    33.543 |\n  5. | Afghanistan   1964    34.004 |\n     |------------------------------|\n  6. | Afghanistan   1965    34.438 |\n  7. | Afghanistan   1966    34.877 |\n  8. | Afghanistan   1967    35.324 |\n  9. | Afghanistan   1968    35.825 |\n 10. | Afghanistan   1969    36.287 |\n     +------------------------------+\nTrade data\n\nOpen the trade data and keep country, year, export and import\nCompute the export share xshare, defined as export / (export + import)\nDrop the observations with a missing export share\nMerge with the life expectancy data (1:1, with country and year as keys)\nKeep the matched observations only\nCount the number of observations by country (hint: bysort country: generate count = _N)\nUsing a local, keep only the countries observed in all years of the panel\n\nBy now, the dataset should look as follows:\n     +-------------------------------------------------------------------------------------+\n     | year     country      export      import    xshare   le_male        _merge   count |\n     |-------------------------------------------------------------------------------------|\n  1. | 1980   Australia   32720.597    26890.83   .548898     70.88   Matched (3)      33 |\n  2. | 1981   Australia   31132.097   29423.028  .5141117      71.2   Matched (3)      33 |\n  3. | 1982   Australia    31867.06   32823.251  .4926095      71.5   Matched (3)      33 |\n  4. | 1983   Australia   32032.664   30058.226  .5158996      71.8   Matched (3)      33 |\n  5. | 1984   Australia   34477.203   31856.781  .5197517      72.1   Matched (3)      33 |\n     +-------------------------------------------------------------------------------------+\nThe export share is not the usual measure of trade openness, which is the sum of exports and imports over GDP. It is used here for simplicity.\nContinents\nWe compute summary statistics by continent. Define the following globals. Text is enclosed in compound quotation marks when it contains commas.\nglobal europe  \"Austria Belgium Bulgaria Denmark Finland France Greece Italy Luxembourg Netherlands Norway Portugal Sweden\"\nglobal oceania \"Australia\"\nglobal asia    \"Bangladesh India Indonesia Jordan Malaysia Pakistan Philippines Singapore Thailand\"\nglobal africa  `\" \"Congo, Dem. Rep.\" \"Congo, Rep.\" \"Kenya\" \"Lesotho\" \"Mauritania\" \"Mauritius\" \"Morocco\" \"Mozambique\" \"Rwanda\" \"South Africa\" \"Tunisia\" \"'\nglobal latam   `\" \"Bolivia\" \"Brazil\" \"Chile\" \"Colombia\" \"Costa Rica\" \"Dominican Republic\" \"Ecuador\" \"El Salvador\" \"Guatemala\" \"Honduras\" \"Mexico\" \"Nicaragua\" \"Panama\" \"Peru\" \"Uruguay\" \"'\n\nUsing loops over the globals, fill a variable continent with the name of the continent\nSave as a temporary file\n\nIt should look as follows:\n. list country continent in 1/10, compress\n\n     +----------------------+\n     |   country  continent |\n     |----------------------|\n  1. | Australia    Oceania |\n  2. | Australia    Oceania |\n  ...\nGraphs\n\nMake a scatter plot of life expectancy and export share in 2012\nMake a scatter plot with the two years 1980 and 2012 on the same graph\nUsing lfitci, add a confidence interval to the first plot. In the legend, keep only the linear fit and the points. Add the note “95% confidence interval” below the graph\nExport the graph as .pdf\n\nWe now compute and plot the mean of life expectancy and of the export share by continent and year.\n\nUse preserve and restore to keep the main dataset in memory during the exercise\nCollapse life expectancy and export share by continent and year, with the mean and the median\nWith a two-axis plot, show the evolution of the export share and of life expectancy for Asia\nMake a plot with one panel per continent showing the same relationship (option by(continent))\n\nRegressions\n\nRegress life expectancy on the export share with the option vce(robust)\nAdd a dummy for each continent. What must be done first?\nAdd year dummies\nPlot the coefficients of the last regression for the export share and the continent dummies only\nPlot the coefficients of the export share across the three regressions\n\n\n\n\n\n\n\n\n\nNoteHints for the graphs and regressions\n\n\n\n\n\n* Confidence interval: lfitci draws the interval (plot 1), the line (plot 2)\ntwoway (lfitci le_male xshare) (scatter le_male xshare), ///\n    legend(order(3 \"Countries\" 2 \"Linear fit\")) note(\"95% confidence interval\")\n\n* Two axes: each series is attached to one axis\ntwoway (line xshare year, yaxis(1)) (line le_male year, yaxis(2)), ///\n    ytitle(\"Export share\", axis(1)) ytitle(\"Life expectancy (years)\", axis(2)) ///\n    legend(order(1 \"Export share\" 2 \"Life expectancy\"))\n\n* Continent dummies: the string variable must be encoded first\nencode continent, generate(continent_id)\nregress le_male xshare i.continent_id, vce(robust)\n\n* Coefficients across models\neststo clear\neststo m1: regress le_male xshare, vce(robust)\neststo m2: regress le_male xshare i.continent_id, vce(robust)\neststo m3: regress le_male xshare i.continent_id i.year, vce(robust)\ncoefplot m1 m2 m3, keep(xshare) xline(0)",
+    "crumbs": [
+      "Data visualisation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html",
+    "href": "part1_data.html",
+    "title": "Data manipulation",
+    "section": "",
+    "text": "This part covers the core data management tasks: opening files, cleaning and creating variables, using macros and loops, reshaping datasets and combining them. We use built-in Stata datasets and a small number of online files.",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#open-and-save-data",
+    "href": "part1_data.html#open-and-save-data",
+    "title": "Data manipulation",
+    "section": "Open and save data",
+    "text": "Open and save data\nThe built-in datasets are opened with sysuse. Other formats require the following commands.\n* Built-in datasets\nsysuse auto, clear\n\n* Stata format (.dta)\nuse \"$path/raw_data/mydata.dta\", clear\n\n* Excel files\nimport excel \"$path/raw_data/mydata.xlsx\", sheet(\"Sheet1\") firstrow clear\n\n* Delimited files (.csv, .txt)\nimport delimited \"$path/raw_data/mydata.csv\", delimiter(\",\") varnames(1) clear\n\n* Files available online\nuse \"https://www.stata.com/users/youtube/rawdata.dta\", clear\n\n* Save the dataset in memory\nsave \"$path/temp/mydata_clean.dta\", replace\n\n\n\n\n\n\nTip\n\n\n\nStata does not overwrite the data in memory by default. The option clear is required to load a dataset when another one is already open. Similarly, save requires the option replace to overwrite an existing file.",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#describe-the-data",
+    "href": "part1_data.html#describe-the-data",
+    "title": "Data manipulation",
+    "section": "Describe the data",
+    "text": "Describe the data\nFor this section, we use the dataset rawdata.dta, which contains health information on individuals. The variable names follow the original file. They should be checked with describe before use.\n\n\n\n\n\n\nTipExercise\n\n\n\nOpen a do-file, start with clear all and follow the instructions:\n\nOpen the file rawdata.dta with the link above\nUse browse to inspect the data\nUse describe to inspect the format of the variables\nUse count to print the number of observations\nUse tabulate to print a frequency table for sex\nUse summarize to print summary statistics for the cholesterol concentration (chol). What is the issue?",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#data-cleaning",
+    "href": "part1_data.html#data-cleaning",
+    "title": "Data manipulation",
+    "section": "Data cleaning",
+    "text": "Data cleaning\nThe dataset requires cleaning. We proceed step by step.\n\nKeep and drop\nAssume that we keep individuals aged more than 25, which is equivalent to dropping those aged 25 or less.\nkeep if age &gt; 25 & !missing(age)\n* Equivalent: drop if age &lt;= 25 | missing(age)\n\n\n\n\n\n\nWarningMissing values\n\n\n\nIn Stata, a missing value is larger than any number. Without the condition !missing(age), the command keep if age &gt; 25 retains the observations with a missing age. The same rule applies to generate and replace with inequalities (see below).\n\n\nObservations with a missing date of birth are dropped. The sample is then restricted to two racial groups.\ndrop if missing(dob)\nkeep if inlist(race, \"White\", \"Black\")\n* Equivalent if \"Other\" is the only other category: drop if race == \"Other\"\n\n\nChange the format of a variable\nThe cholesterol concentration is stored as a string and should be numeric. Before converting, we identify the entries that prevent the conversion.\nlist chol if missing(real(chol)) & !missing(chol)   // Non-numeric entries\ndestring chol, replace                              // Convert in place\ndestring chol, generate(chol_num)                   // Or create a new variable\nThe related commands are tostring (numeric to string), encode (string to labelled numeric) and decode (labelled numeric to string).\n\n\nVariable labels and value labels\nA variable label describes a variable. A value label describes the values of a categorical variable. Some variables of the dataset have no label. Using label variable, we label age and dob.\nlabel variable age \"Age (years)\"\nlabel variable dob \"Date of birth\"\nThe variable sex takes the values 0 (female) and 1 (male). To print these names instead of the numbers, we define a value label and attach it to the variable.\nlabel define sex_lab 0 \"Female\" 1 \"Male\"\nlabel values sex sex_lab\n\ntabulate sex        // Check\ntabulate sex, nolabel   // Display the underlying values\n\n\nCreate variables\nThe command generate creates a variable and replace modifies an existing one. We build a dummy variable for race.\ngenerate race_dummy = .                   // Create an empty variable\nreplace race_dummy = 1 if race == \"White\"\nreplace race_dummy = 0 if race == \"Black\"\nA dummy variable can also be created in one line. The comparison returns 1 if true and 0 otherwise.\ngenerate white = (race == \"White\") if !missing(race)\n\n\nGrouping variable 1: bins\nThe cholesterol concentration is heterogeneous:\n. summarize chol\n\n    Variable |        Obs        Mean    Std. dev.       Min        Max\n-------------+---------------------------------------------------------\n        chol |      1,266    216.4415    46.84972         89        426\nWe want to assign each individual to a bin of width 10, identified by its lower bound. Two approaches exist, a built-in function and a loop. Note that round(chol, 10) would assign the nearest multiple of 10, which is different.\n* Built-in function\ngenerate floored_chol = floor(chol/10)*10\n* Loop\ngenerate floored_chol_loop = .\nforvalues x = 80(10)420 {\n    replace floored_chol_loop = `x' if chol &gt;= `x' & chol &lt; `x' + 10\n}\nThe loop is read as follows:\n\ngenerate creates an empty numeric variable\nforvalues x = 80(10)420 { opens a loop where the running variable x goes from 80 to 420 with a step of 10\nreplace assigns the value x to the observations whose chol lies in the interval \\([x, x+10)\\)\n} closes the loop. The brace { must be the last character of the first line and } must be alone on its line.\n\nTwo remarks:\n\nThe function inrange(chol, x, x + 9) is inclusive on both sides. Why is it inappropriate when chol is not an integer?\nWhich of the two approaches is the most efficient? When is a loop justified?\n\n\n\nGrouping variable 2: comparison with the mean\nWe want a variable equal to 1 if the weight is above the mean and 0 otherwise.\n\n\n\n\n\n\nTipExercise\n\n\n\nCreate the variable in three steps:\n\nCompute the mean of weight\nGenerate a variable containing this mean, with egen new_var = mean(var)\nGenerate the dummy variable. Pay attention to missing values.\n\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\negen weight_mean = mean(weight)\ngenerate weight_above = (weight &gt; weight_mean) if !missing(weight)\nA shorter version using stored results is presented in the next section.\n\n\n\n\n\nGrouping variable 3: statistics by group\nWe now want to identify individuals whose cholesterol concentration exceeds the 3rd quartile of their own age class. The prefix by computes a statistic within groups. It is used in two ways:\n\nAs a prefix, after sorting: bysort age_class: command. The prefix is equivalent to by age_class, sort: command.\nAs an option, for the commands that allow it: egen ..., by(age_class).\n\nThe prefix is more general and works with most commands.\n\n\n\n\n\n\nTipExercise\n\n\n\n\nCreate the variable age_class, equal to the lower bound of the decade of age\nCompute the 75th percentile of chol within each age class, with egen and the function pctile()\nCreate the dummy chol_high, equal to 1 if chol is above this threshold\n\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\ngenerate age_class = floor(age/10)*10\nbysort age_class: egen chol_p75 = pctile(chol), p(75)\ngenerate chol_high = (chol &gt; chol_p75) if !missing(chol)\ntabulate age_class chol_high, row",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#stored-results-locals-and-globals",
+    "href": "part1_data.html#stored-results-locals-and-globals",
+    "title": "Data manipulation",
+    "section": "Stored results, locals and globals",
+    "text": "Stored results, locals and globals\nThree objects should not be confused.\nStored results. After most commands, Stata stores results in memory. The results of descriptive commands are r() and those of estimation commands are e(). They are listed with return list and ereturn list. They are overwritten by the next command of the same class.\nLocal macros. A local macro is a named piece of text. It is defined with local and called between a backtick and an apostrophe, `name'. It exists only during the current execution of the do-file.\nGlobal macros. A global macro is defined with global and called with $name (or ${name}). It persists until Stata is closed.\nquietly summarize weight\nreturn list                                  // Results stored by summarize\n\ngenerate weight_above2 = (weight &gt; r(mean)) if !missing(weight)\n\nlocal threshold = r(mean)                    // Copy a stored result in a local\ndisplay \"Mean weight: `threshold'\"\n\n\n\n\n\n\nWarningExecution of locals\n\n\n\nA local macro disappears when the execution ends. If a do-file is run by selecting and executing lines separately, each execution is independent. A local defined in the first execution is empty in the second one. The command then fails, or worse, runs silently on an empty argument. Blocks that use locals must be selected and executed together.\n\n\nStored results can also be used in the loop presented above, which then adapts to the range of the data:\nuse \"https://www.stata.com/users/youtube/rawdata.dta\", clear\ndestring chol, replace\n\ncapture drop floored_chol\ngenerate floored_chol = .\n\nquietly summarize chol\nlocal min_chol = floor(r(min)/10)*10\nlocal max_chol = ceil(r(max)/10)*10\nlocal step = 10\n\nforvalues x = `min_chol'(`step')`max_chol' {\n    quietly replace floored_chol = `x' if chol &gt;= `x' & chol &lt; `x' + `step'\n}\nGlobals store information for a longer period. The path of the working directory is the typical example.\nglobal path \"C:/Users/username/courses/2026_eco51423ep\"\nglobal sexes \"Male Female\"\n\nuse \"$path/raw_data/mydata.dta\", clear\nText macros are defined without the sign =. With =, Stata evaluates an expression, which imposes a length limit on strings.",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#loops",
+    "href": "part1_data.html#loops",
+    "title": "Data manipulation",
+    "section": "Loops",
+    "text": "Loops\nWe have seen loops over numbers with forvalues. The command foreach loops over other objects, in particular lists.\n* Over the variables of a list\nforeach x of varlist weight chol {\n    summarize `x'\n}\n\n* Over a list of words\nforeach x in Male Female {\n    display \"`x'\"\n}\n\n* Over the elements of a global or a local\nforeach x of global sexes {\n    display \"`x'\"\n}\n\n\n\n\n\n\nWarning\n\n\n\nThe syntax foreach x in \"a b c\" loops over one element, the string a b c. The quotation marks must be removed to loop over three elements.\n\n\nThe command levelsof stores the distinct values of a variable in a local. It is useful to loop over the categories of a variable.\nlevelsof race, local(races) clean\nforeach r of local races {\n    display \"Mean weight, race = `r':\"\n    summarize weight if race == \"`r'\"\n}",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#strings-and-dates",
+    "href": "part1_data.html#strings-and-dates",
+    "title": "Data manipulation",
+    "section": "Strings and dates",
+    "text": "Strings and dates\nString variables are frequent in raw data. In the health dataset, the date of birth is stored as a string. We first inspect the format.\nlist dob in 1/5\nThe following functions are used to extract elements of a string.\ngenerate month3 = strupper(substr(dob, 1, 3))     // First three letters, upper case\ngenerate first_word = word(dob, 1)                // First word\ngenerate first_word2 = substr(dob, 1, strpos(dob, \" \") - 1)   // Equivalent\n\nsubstr(s, n1, n2) returns n2 characters starting at position n1. The third argument is a length, not an end position.\nstrpos(s, t) returns the position of the string t in s, and 0 if it is absent.\nword(s, n) returns the nth word, words being separated by spaces.\nOther useful functions: strlen, strtrim, strlower, subinstr, regexm. The command split separates a string into several variables.\n\nA date stored as a string cannot be used in computations. It is converted with date() and displayed with a date format. The mask (here MDY) must match the format of the string.\ngenerate dob_date = date(dob, \"MDY\")\nformat dob_date %td\ngenerate birth_year = year(dob_date)",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#reshape-collapse-merge-and-append",
+    "href": "part1_data.html#reshape-collapse-merge-and-append",
+    "title": "Data manipulation",
+    "section": "Reshape, collapse, merge and append",
+    "text": "Reshape, collapse, merge and append\nFor this section, we use the built-in dataset uslifeexp.dta. It contains, for each year, the life expectancy of the overall population (le), and by gender, race and gender-race.\n\nReshape\nThe dataset is in wide format: each row is a year and each group has its own column. We want a long format, with one row per year and per group. This operation is called reshaping.\nsysuse uslifeexp, clear\ndescribe\n\nrename le le_all                 // The overall series must follow the pattern le_*\nreshape long le_, i(year) j(group) string\nrename le_ le\nThe syntax is as follows:\n\nreshape long converts from wide to long and reshape wide from long to wide\nle_ is the stub, the common beginning of the names of the variables to reshape\ni() contains the identifier of the observation, which does not change\nj() is the name of the new variable, which contains the suffixes of the variables (here the groups)\nstring is required if the suffixes contain letters\n\nThe dataset now has three columns: year, group and le. The command reshape wide le, i(year) j(group) string reverses the operation.\n\n\nCollapse\nWe want the average life expectancy by group and by decade. We create the decade and use collapse.\ngenerate decade = floor(year/10)*10\ncollapse (mean) le, by(decade group)\ncollapse replaces the dataset in memory by a dataset of statistics. Other statistics are available: median, sd, count, min, max. Several statistics can be computed at once, for instance collapse (mean) le_mean = le (sd) le_sd = le, by(decade group). The command is destructive and is usually placed between preserve and restore (see below).\n\n\nMerge\nTwo datasets are joined with merge. One of them is in memory (the master) and the other is on disk (the using dataset). The syntax is:\nmerge 1:1 state using \"$path/temp/census1980.dta\"\nThe type of merge describes the relation between the observations of the two datasets:\n\n1:1: each key appears at most once in each dataset\nm:1: several observations of the master share the same key in the using dataset\n1:m: the reverse of m:1\nm:m: not to be used. The result is arbitrary and the Stata manual advises against it.\n\nmerge creates the variable _merge, which tags the origin of each observation.\n\n\n\nValue\nMeaning\n\n\n\n\n1\nin the master only\n\n\n2\nin the using dataset only\n\n\n3\nin both (matched)\n\n\n\nA rigorous merge follows a fixed routine. The uniqueness of the key is checked before the merge and the outcome is verified after.\nisid state                                        // Fails if state is not unique\nmerge 1:1 state using \"$path/temp/census1980.dta\", gen(merge_census)\ntabulate merge_census                             // Inspect the outcome\nlist state if merge_census != 3                   // Identify the problem\nkeep if merge_census == 3                         // Or: assert merge_census == 3\ndrop merge_census\nThe options keep(match), keepusing(varlist), assert(match) and nogenerate shorten this routine. An exercise on merge is proposed in Part 2.\n\n\nAppend\nappend stacks two datasets. The variables are matched by name. A variable absent from one dataset is filled with missing values (. for numeric variables and an empty string for string variables).\nappend using \"$path/temp/census2010.dta\", generate(source)\nThe option generate() creates a variable identifying the origin of each observation. Variables with the same name but different types (numeric and string) generate an error.",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#temporary-datasets",
+    "href": "part1_data.html#temporary-datasets",
+    "title": "Data manipulation",
+    "section": "Temporary datasets",
+    "text": "Temporary datasets\nIt is sometimes convenient to store a dataset in memory temporarily.\n\ntempfile\nA subset of the data is saved in a temporary file, without writing it on the disk, and appended to another one. Temporary files are local macros and the warning above applies: the block is executed as a whole.\nuse \"$path/raw_data/data.dta\", clear\ndrop if gender == 0\n* ... cleaning ...\n\ntempfile males\nsave `males'\n\nuse \"$path/raw_data/data.dta\", clear\ndrop if gender == 1\n* ... cleaning ...\n\nappend using `males'\n\n\npreserve and restore\nTo compute an intermediary statistic, save it, and go back to the main dataset, the data are preserved and then restored.\nsysuse auto, clear\n\n* ... code ...\n\npreserve\ncollapse (mean) price, by(foreign)\nsave \"$path/temp/price_by_foreign.dta\", replace\nrestore\n\n* ... the code continues on the original dataset ...",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#frames",
+    "href": "part1_data.html#frames",
+    "title": "Data manipulation",
+    "section": "Frames",
+    "text": "Frames\nSince Stata 16, several datasets can be held in memory in frames. The dataset opened at the start of a session is in the frame default.\nframe create census                                    // Create a frame\nframe census: use \"$path/temp/census1980.dta\", clear   // Load data in it\nframes dir                                             // List the frames\n\nframe change census                                    // Move to the frame\nframe change default                                   // Come back\n\n* Bring a variable from another frame, without merge\nfrlink m:1 state, frame(census)\nfrget pop1980, from(census)\n\nframe drop census\nFrames avoid the repeated saving and loading of temporary files. merge remains the standard tool and is the one used in the exercises.",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "part1_data.html#data-quality-checks",
+    "href": "part1_data.html#data-quality-checks",
+    "title": "Data manipulation",
+    "section": "Data quality checks",
+    "text": "Data quality checks\nChecks are included in the do-file, not only performed interactively. A command that fails stops the execution and signals the problem.\nisid id                                  // Fails if id does not identify the observations\nduplicates report id                     // Number of duplicates\nassert age &gt;= 0 & age &lt; 120 if !missing(age)   // Fails if the condition is false\nmisstable summarize                      // Missing values by variable\ncodebook, compact                        // Compact description of all variables\ncompress                                 // Reduce the storage size of the variables",
+    "crumbs": [
+      "Data manipulation"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Introduction to Stata",
+    "section": "",
+    "text": "This website contains the tutorials of the Introduction to Stata course of the Master’s programme at École Polytechnique. The course has three objectives: (i) master the basics of Stata, (ii) implement the standard statistical and empirical tools, and (iii) produce publication-quality output.",
+    "crumbs": [
+      "Home"
+    ]
+  },
+  {
+    "objectID": "index.html#class-outline",
+    "href": "index.html#class-outline",
+    "title": "Introduction to Stata",
+    "section": "Class outline",
+    "text": "Class outline\n\n\n\n\n\n\n\n\n\nSession\nPart\nContent\nDuration\n\n\n\n\n1\nPart 0: First hand on Stata\nInterface, do-files, logs, syntax, packages\n1h\n\n\n1\nPart 1: Data manipulation\nImport, cleaning, macros, loops, strings, reshape, merge\n3h\n\n\n2\nPart 2: Summary statistics\nDescriptive statistics, LaTeX export, regression tables\n1h15\n\n\n2\nPart 3: Data visualisation\nScatter plots, histograms, bar charts, box plots, line charts, coefficient plots\n1h30\n\n\n2\nPart 4: Regression workflow\nPanel data, fixed effects, clustered standard errors\n45 min\n\n\n2\nPart 5: Debugging clinic\nError messages, data checks, master do-file\n30 min\n\n\n\nThe parts are cumulative. Part 2 relies on the datasets and macros built in Part 1.\nDuring the sessions, the material of each part is presented in full. Exercises are provided and must be completed during the session. Solutions are available in collapsed boxes and should be opened only after an attempt.",
+    "crumbs": [
+      "Home"
+    ]
+  },
+  {
+    "objectID": "index.html#conventions-used-on-this-website",
+    "href": "index.html#conventions-used-on-this-website",
+    "title": "Introduction to Stata",
+    "section": "Conventions used on this website",
+    "text": "Conventions used on this website\n\nCode blocks are displayed but not executed. Each block must be copied into a do-file.\nComments in the code start with // or *.\nThe global macro $path denotes the working directory. It is defined in Part 0.\nSome commands come from user-written packages. They are installed once per computer (see Part 0).\nDatasets are called by name. Their location is $path/raw_data/.\n\n\n\n\n\n\n\nTipExercise\n\n\n\nExercises appear in boxes of this type.",
+    "crumbs": [
+      "Home"
+    ]
+  },
+  {
+    "objectID": "index.html#about-this-site-and-its-inspirations",
+    "href": "index.html#about-this-site-and-its-inspirations",
+    "title": "Introduction to Stata",
+    "section": "About this site and its inspirations",
+    "text": "About this site and its inspirations\nThis site was created for teaching purposes. It is perfectible and any constructive comment is welcome (write me an email). The material draws on the teaching resources listed here.",
+    "crumbs": [
+      "Home"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html",
+    "href": "part0_stata.html",
+    "title": "First hand on Stata",
+    "section": "",
+    "text": "This part introduces the software, its logic and the working conventions used throughout the course. Stata is proprietary software, first released in 1985. The version used as a reference here is Stata 19.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#general-philosophy",
+    "href": "part0_stata.html#general-philosophy",
+    "title": "First hand on Stata",
+    "section": "General philosophy",
+    "text": "General philosophy\nStata works on one active dataset at a time. Every command acts on the dataset held in memory. Since Stata 16, several datasets can be held simultaneously in frames. The one-dataset logic nevertheless remains the default.\nCode is written in a do-file, a text file with the extension .do. A do-file can be executed entirely or line by line. Each line is a separate command.\nStata has three main strengths. Its syntax is compact and stable across versions. It is efficient for standard econometric tasks. Tables and figures are easily exported to .tex, .pdf or image formats. Its main limitations are its price and its limited flexibility for non-tabular data.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#the-interface",
+    "href": "part0_stata.html#the-interface",
+    "title": "First hand on Stata",
+    "section": "The interface",
+    "text": "The interface\n\n\n\n\n\n\n\nWindow\nContent\n\n\n\n\nCommand\nLine where a single command is typed and executed\n\n\nResults\nOutput of the commands\n\n\nReview\nHistory of the commands executed\n\n\nVariables\nVariables of the dataset, with their labels\n\n\nProperties\nCharacteristics of the selected variable and of the dataset\n\n\nDo-file editor\nText editor for scripts, opened with doedit\n\n\nData browser and editor\nSpreadsheet view of the data, opened with browse or edit\n\n\n\n\n\n\n\n\n\nWarning\n\n\n\nedit allows manual changes to the data. Manual changes are not recorded in any script and cannot be reproduced. browse is the appropriate command to inspect a dataset.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#best-practice",
+    "href": "part0_stata.html#best-practice",
+    "title": "First hand on Stata",
+    "section": "Best practice",
+    "text": "Best practice\nSome practices should be adopted before writing the first line of code. They matter for three reasons:\n\nReproducibility is a requirement of empirical research. Most leading economics journals require a replication package.\nA structured project reduces errors and facilitates collaboration.\nCode is read more often than it is written, including by its author, months later.\n\n\nFolder organisation\nEach project is stored in a working directory (wd), which contains a fixed set of subfolders. The same structure is used in every project. This saves time when navigating between projects or changing computers.\n~/courses/2026_eco51423ep/\n├── code/          &lt;- do-files\n├── raw_data/      &lt;- original data, never modified\n├── temp/          &lt;- intermediate datasets\n├── output/\n│   ├── figures/\n│   └── tables/\n└── logs/          &lt;- log files\nThe folder raw_data is treated as read-only. Every transformation of the data is performed by a do-file and saved in temp.\n\n\nNaming conventions\nFile names are short, self-explanatory and written in lower case. Spaces and special characters are avoided. An underscore is used instead. A numeric prefix indicates the order of execution, for instance 1_clean_data.do, 2_merge_datasets.do and 3_analysis.do.\nVariables follow the same logic. A dataset of wages for individuals aged 25 to 30 can be called wage_25_30. The name w2530 is too short and wage_individuals_aged_25_30 is too long.\n\n\nWriting code\n\nCode is commented. The comments explain the purpose of a block, not the syntax of each line.\nComments start with * (at the beginning of a line) or // (after a space, at the end of a line). A block of comments is placed between /* and */.\nA long line is split with ///.\nScripts are short and each script has one purpose.\nPaths are written with forward slashes (/) on every operating system.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#the-do-file",
+    "href": "part0_stata.html#the-do-file",
+    "title": "First hand on Stata",
+    "section": "The do-file",
+    "text": "The do-file\nA do-file starts with a header and a set-up block. The following template is used throughout the course.\n/*==========================================================================\n    Project : Introduction to Stata\n    File    : code_tutorial.do\n    Author  : First Last\n    Date    : 28 September 2026\n    Purpose : Load the auto dataset and produce basic descriptive output\n==========================================================================*/\n\n* ===== 1. Set-up =====\n\nclear all                 // Empty the memory\nset more off              // Do not pause the output\nset varabbrev off         // Require complete variable names\ncapture log close         // Close a possibly open log without error\n\nglobal path \"C:/Users/username/courses/2026_eco51423ep\"   // To adapt\ncd \"$path\"\n\nlog using \"$path/logs/part0.smcl\", replace\n\n* ===== 2. Data =====\n\nsysuse auto, clear\n\n* ===== 3. Analysis =====\n\ndescribe\nsummarize price mpg weight\n\nlog close\nThe global macro $path is defined once, at the top of the do-file. All the other paths are built from it. To run the code on another computer, only this line is modified.\n\nRun lines\nA do-file is executed entirely with Ctrl + D (Shift + Cmd + D on macOS). Selecting some lines before pressing the shortcut executes the selection only.\nBy default, Stata prints all the output. The prefix quietly suppresses the output of a command. A whole block can be silenced with braces.\nquietly summarize price\n\nquietly {\n    regress price mpg\n    predict price_hat\n}\nThe prefix noisily reactivates the output within a quietly block.\n\n\nLogs\nA log file records the commands and the output displayed in the Results window. It is opened with log using and closed with log close.\ncapture log close\nlog using \"$path/logs/part0.smcl\", replace   // Open a log in the Stata format\nlog using \"$path/logs/part0.log\", replace text   // Or a plain text log\n\n* ... commands ...\n\nlog close\ncapture log close at the top of the do-file avoids an error if a log is already open, for instance after an interrupted execution.\n\n\nGetting help\nhelp summarize        // Documentation of a command\nsearch panel data     // Search by keyword in the documentation and the packages\nThe complete documentation is available in PDF from the menu Help. The command help is the first reference, before any online search.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#syntax",
+    "href": "part0_stata.html#syntax",
+    "title": "First hand on Stata",
+    "section": "Syntax",
+    "text": "Syntax\nThe syntax of most Stata commands follows the same structure:\n[by varlist:] command [varlist] [if] [in] [weight] [using filename] [, options]\nA command starts with its name, for instance summarize. It is followed by the variables (or the object, the path, etc.), by conditions and by options placed after a comma.\nsysuse auto, clear\n\nsummarize price mpg                      // Two variables\nsummarize price mpg if foreign == 1      // A condition\nsummarize price in 1/20                  // The first 20 observations\nsummarize price, detail                  // An option\nbysort foreign: summarize price          // A prefix: one output per group\n\nAbbreviations and wildcards\nMost commands have shortcuts. regress can be written reg and summarize can be written su or sum. Options can also be abbreviated. Abbreviations of command names are convenient in the Command window but reduce readability in a do-file.\nAbbreviations of variable names are a source of errors. The option set varabbrev off, included in the header above, disables them.\nWildcards are available in lists of variables:\n\n* stands for any string of characters\n? stands for exactly one character\n- denotes a range of variables, in the order of the dataset\n\nConsider the variables popmun2007, popmun2008, up to popmun2020. To summarise these 14 variables:\nsummarize popmun2007 popmun2008 popmun2009 popmun2010 popmun2011 popmun2012 popmun2013 popmun2014 popmun2015 popmun2016 popmun2017 popmun2018 popmun2019 popmun2020\nsummarize popmun2007-popmun2020     // Only if the variables are in that order\nsummarize popmun*                   // Requires that no other variable starts with popmun\n\n\nOperators and missing values\n\nComparison: == (equal to), != (different from), &gt;, &gt;=, &lt;, &lt;=\nLogical operators: & (and), | (or), ! (not)\nMembership and range: inlist(x, 1, 2, 3) and inrange(x, 10, 20)\nMissing values: missing(x) is true if x is missing\n\n\n\n\n\n\n\nWarningMissing values\n\n\n\nA missing numeric value is denoted . and is treated by Stata as larger than any number. The condition age &gt; 25 is therefore true for an observation with a missing age. Conditions on variables containing missing values should include & !missing(age). This point causes frequent silent errors and is revisited in Part 1.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#first-commands",
+    "href": "part0_stata.html#first-commands",
+    "title": "First hand on Stata",
+    "section": "First commands",
+    "text": "First commands\nThe following commands describe a dataset. They are run on the built-in auto dataset.\nsysuse auto, clear\n\ndescribe                  // Variables, types, labels\ncodebook price foreign    // Detailed description of selected variables\nlist make price in 1/5    // Print observations\nsummarize price mpg       // Summary statistics\ntabulate foreign          // Frequency table\ncount if foreign == 1     // Number of observations satisfying a condition\n\n\n\n\n\n\nTipExercise\n\n\n\n\nCreate the folder structure presented above and open a new do-file with the header template.\nDefine $path and open a log file.\nLoad the auto dataset. How many observations and variables does it contain?\nCompute the mean, the median and the 90th percentile of price.\nWhat is the share of foreign cars?\nHow many foreign cars are priced above 10,000 USD?\nClose the log and open the file in a text editor.\n\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\nsysuse auto, clear\n\ndescribe                              // 74 observations, 12 variables\nsummarize price, detail               // Mean, median (p50) and p90 in the output\ntabulate foreign                      // Share of foreign cars in the Percent column\ncount if foreign == 1 & price &gt; 10000",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part0_stata.html#install-packages",
+    "href": "part0_stata.html#install-packages",
+    "title": "First hand on Stata",
+    "section": "Install packages",
+    "text": "Install packages\nA large part of the work can be done with base Stata. Historically, user-written packages have been integrated progressively in the main version. Some packages nevertheless have to be installed beforehand. The installation is done once per computer.\nssc install estout, replace         // Tables (Part 2)\nssc install coefplot, replace       // Coefficient plots (Part 3)\nssc install blindschemes, replace   // Graph schemes (Part 3)\nssc install ftools, replace         // Required by reghdfe (Part 4)\nssc install reghdfe, replace        // High-dimensional fixed effects (Part 4)\nTo check whether a package is installed, type which estout. The command ssc describe estout prints its description.\n\n\n\n\n\n\nWarning\n\n\n\nOn shared computers, the installed packages may be erased when the session is closed. The installation block is then run at the beginning of each session. It is also part of the master do-file presented in Part 5.",
+    "crumbs": [
+      "First hand on Stata"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html",
+    "href": "part2_desc.html",
+    "title": "Summary statistics",
+    "section": "",
+    "text": "This part covers the computation of summary statistics, in particular by group, and their export to LaTeX. It also introduces regression tables.",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html#simple-statistics",
+    "href": "part2_desc.html#simple-statistics",
+    "title": "Summary statistics",
+    "section": "Simple statistics",
+    "text": "Simple statistics\nWe use the standard auto.dta dataset.\nsysuse auto, clear\n\ndescribe\nsummarize\nlist in 1/10\nSummary statistics for one variable, with and without the detailed distribution:\nsummarize price\nsummarize price, detail\nThe command tabstat is more compact and handles several variables. The option by() splits the statistics by a categorical variable, and statistics() selects the statistics.\ntabstat price mpg weight length, statistics(mean sd min p50 max n) columns(statistics)\ntabstat price mpg weight, by(foreign) statistics(mean sd p50 n) columns(statistics)\nFrequency tables are obtained with tabulate, for one or two variables. Missing values are excluded unless the option missing is specified.\ntabulate foreign\ntabulate foreign rep78, row column\ntabulate foreign rep78, missing\nThe mean of a variable by category is printed with the option summarize().\ntabulate foreign, summarize(mpg)\nA test of equality of means between two groups is performed with ttest. The option unequal allows for different variances.\nttest price, by(foreign) unequal\nThe pairwise correlations are obtained with correlate (listwise deletion) or pwcorr (pairwise deletion, with significance levels).\ncorrelate price mpg weight\npwcorr price mpg weight, sig",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html#latex-export",
+    "href": "part2_desc.html#latex-export",
+    "title": "Summary statistics",
+    "section": "LaTeX export",
+    "text": "LaTeX export\nThe package estout provides two commands. estpost stores the output of descriptive commands (summarize, tabstat, tabulate, ttest) as estimation results. esttab writes these results in a table, in several formats including LaTeX.\n\n\n\n\n\n\nTipInstall packages\n\n\n\nThe package estout is installed once per computer:\nssc install estout, replace\n\n\nThe key commands are the following.\n\neststo clear removes the stored estimates, to start from a clean state\nestpost stores the results of a descriptive command\nesttab prints or exports the table\n\n\nOverall summary statistics\neststo clear\nestpost summarize price mpg weight length, detail listwise\n\nesttab using \"$path/output/tables/summary_overall.tex\", replace ///\n    title(\"Summary statistics\") ///\n    cells(\"count(fmt(%9.0f)) mean(fmt(%9.2f)) sd(fmt(%9.2f)) min(fmt(%9.0f)) p50(fmt(%9.2f)) max(fmt(%9.0f))\") ///\n    label booktabs noobs nomtitle\nThe option detail is required for the median (p50) to be stored. The file summary_overall.tex can be included in a LaTeX document with \\input{}.\n\n\n\n\n\n\nTipLine breaks\n\n\n\nThe symbol /// at the end of a line indicates that the command continues on the next line. It is required in do-files, whatever the version of Stata. The automatic wrapping displayed in the editor is a visual feature and does not split the command. Since a command spans several lines, the whole block must be selected and executed together.\n\n\n\n\nSummary statistics by group\nThe table below reports the mean and the standard deviation of price, mpg and weight for each value of foreign.\neststo clear\nestpost tabstat price mpg weight, by(foreign) statistics(mean sd p50 n) nototal columns(statistics)\n\nesttab . using \"$path/output/tables/summary_by_foreign.tex\", replace ///\n    cells(mean sd) label nogaps booktabs noobs nomtitle\nOther text formats are available: .txt, .csv, .smcl (the Stata format), or .rtf. Excel files are produced with the command putexcel, which is not covered here.\nAn alternative builds one column per group. It gives full control over the layout.\neststo clear\n\nestpost summarize price mpg weight if foreign == 0\neststo domestic\nestpost summarize price mpg weight if foreign == 1\neststo foreign_cars\n\nesttab domestic foreign_cars using \"$path/output/tables/summary_groups.tex\", replace ///\n    cells(\"mean(fmt(%9.2f)) sd(fmt(%9.2f))\") ///\n    mtitles(\"Domestic\" \"Foreign\") label booktabs noobs\n\n\nBalance table\nEconomic papers usually report the means of two groups and the test of their difference. The command estpost ttest stores the means of each group (mu_1, mu_2) and the difference (b).\neststo clear\nestpost ttest price mpg weight length, by(foreign)\n\nesttab using \"$path/output/tables/balance.tex\", replace ///\n    cells(\"mu_1(fmt(%9.2f)) mu_2(fmt(%9.2f)) b(star fmt(%9.2f))\") ///\n    collabels(\"Domestic\" \"Foreign\" \"Difference\") ///\n    star(* 0.10 ** 0.05 *** 0.01) label booktabs noobs nomtitle nonumber\nThe difference is computed as the mean of the first group minus the mean of the second group. The sign should be checked against the coding of the variable.\n\n\nFrequency table\neststo clear\nestpost tabulate foreign\n\nesttab using \"$path/output/tables/freq_foreign.tex\", replace ///\n    cells(\"b(label(Frequency)) pct(fmt(%9.2f))\") ///\n    label booktabs noobs nomtitle",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html#regression-tables",
+    "href": "part2_desc.html#regression-tables",
+    "title": "Summary statistics",
+    "section": "Regression tables",
+    "text": "Regression tables\nA regression table requires a regression. The syntax is regress y x, options. Many other estimators exist (areg, ivregress, reghdfe, etc.). They depend on the model and are beyond the scope of this part.\nWe study the correlation between the characteristics of the cars and their price. The first model is:\n\\[\n\\texttt{price}_i = \\beta_0 + \\beta_1 \\texttt{foreign}_i + \\beta_2 \\texttt{mpg}_i + \\sum_{k=2}^{5} \\gamma_k \\mathbf{1}\\{\\texttt{rep78}_i = k\\} + \\varepsilon_i\n\\]\nThe associated code is:\nsysuse auto, clear\n\nregress price i.foreign mpg i.rep78, vce(robust)\n\n\n\n\n\n\nTip\n\n\n\nThe prefix i. declares a variable as categorical. It is required for foreign and rep78 since they are coded as numbers. The option vce(robust) reports heteroskedasticity-robust standard errors.\n\n\nThe second model adds an interaction. It assesses whether the association between fuel efficiency and price differs between domestic and foreign cars.\n\\[\n\\texttt{price}_i = \\beta_0 + \\beta_1 \\texttt{foreign}_i + \\beta_2 \\texttt{mpg}_i + \\beta_3 \\texttt{foreign}_i \\times \\texttt{mpg}_i + \\sum_{k=2}^{5} \\gamma_k \\mathbf{1}\\{\\texttt{rep78}_i = k\\} + \\varepsilon_i\n\\]\nregress price i.foreign##c.mpg i.rep78, vce(robust)\nThe operator ## includes the main effects and the interaction. The operator # includes the interaction only. The prefix c. declares mpg as continuous. Without it, Stata would interact foreign with each value of mpg.\n\nStore and export the results\nThe estimates are stored with eststo, which can be used in two equivalent ways.\neststo clear\n\neststo no_inter: regress price i.foreign mpg i.rep78, vce(robust)\n\nregress price i.foreign##c.mpg i.rep78, vce(robust)\neststo inter\nThe stored estimates remain available until eststo clear or until Stata is closed. They are printed with esttab. The following commands build the final table progressively. Each line adds one option to the previous one.\nesttab no_inter inter                                   // Default display\nesttab no_inter inter, booktabs                         // LaTeX format\nesttab no_inter inter, booktabs se                      // Standard errors instead of t-statistics\nesttab no_inter inter, booktabs b(%9.2f) se(%9.2f)      // Number format\nesttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///\n    star(* 0.10 ** 0.05 *** 0.01)                       // Significance levels\nesttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///\n    star(* 0.10 ** 0.05 *** 0.01) ///\n    indicate(\"Repair record dummies = *.rep78\")         // One line for the dummies\nesttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///\n    star(* 0.10 ** 0.05 *** 0.01) ///\n    indicate(\"Repair record dummies = *.rep78\") ///\n    label nobaselevels                                  // Variable labels, no base level\nThe final version adds the statistics, the titles and the notes, and writes the file:\nesttab no_inter inter using \"$path/output/tables/reg_price.tex\", replace ///\n    booktabs b(%9.2f) se(%9.2f) ///\n    star(* 0.10 ** 0.05 *** 0.01) ///\n    indicate(\"Repair record dummies = *.rep78\") ///\n    label nobaselevels ///\n    mtitles(\"Baseline\" \"Interaction\") nonumbers ///\n    stats(N r2, fmt(%9.0fc %9.3f) labels(\"Observations\" \"R-squared\")) ///\n    title(\"Determinants of car prices\") ///\n    nonotes addnotes(\"Robust standard errors in parentheses.\" ///\n                     \"* p&lt;0.10, ** p&lt;0.05, *** p&lt;0.01\")\n\n\n\n\n\n\nTip\n\n\n\nThe significance levels of the convention in economics are 10%, 5% and 1%. The default levels of esttab are 5%, 1% and 0.1% and should be changed with star().",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html#advanced-users",
+    "href": "part2_desc.html#advanced-users",
+    "title": "Summary statistics",
+    "section": "Advanced users",
+    "text": "Advanced users\nThe package tabout produces complex cross-tabulations directly in LaTeX or Excel. Its documentation is dense and the syntax is demanding, but it is very flexible.",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part2_desc.html#exercise",
+    "href": "part2_desc.html#exercise",
+    "title": "Summary statistics",
+    "section": "Exercise",
+    "text": "Exercise\nTo conclude Parts 1 and 2, we combine two sources on the population of the US states. The first one is the built-in census.dta. The second one is an Excel file, nst-est2019-01.xlsx, available in the raw data folder.\n\nStep 1: 1980 data\n\nSet up the do-file. Define two globals: one containing the path and one containing the string 1980 2010, called years\nLoad census.dta with sysuse and tabulate region. The US census defines four regions: Northeast, North Central (Midwest), South and West\nThe labels of region are abbreviated. Define a new label with the full names and update the label of region\nUsing decode region, gen(region_name), create a string variable with the names of the regions\nKeep the variables state, region, region_name and pop\nRename pop to pop1980\nSave the dataset as $path/temp/census1980.dta\n\n\n\nStep 2: 2010 data\n\nOpen nst-est2019-01.xlsx with import excel. Only the range A10:B60 is kept, with the option cellrange()\nRename the two columns state and pop2010\nThe names of the states start with a dot. Remove it with subinstr()\nSave the dataset as $path/temp/census2010.dta\n\n\n\nStep 3: merge\n\nClear the memory, open census2010.dta and merge it with census1980.dta, with 1:1 and state as key. Tabulate _merge. What happened?\nSome states are named differently in the two datasets. Write a loop over the global years. It opens each dataset, replaces the abbreviations N. by North, S. by South and W. by West, and saves the dataset\nRepeat the merge. Inspect the unmatched observations and drop them if they cannot be reconciled\n\n\n\nStep 4: statistics\n\nCompute the population change between 1980 and 2010, in percent\nMake a table summarising the mean, the standard deviation and the median of this change by region\nReshape the dataset to long format, with two rows per state, one for 1980 and one for 2010\n\n\n\nBonus\n\nCollapse the change by region, computing the mean. Use preserve and restore\nUsing graph bar var, over(group), make a bar chart of the change by region\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\n* Step 1\nglobal path \"C:/Users/username/courses/2027_eco51423ep\"\nglobal years \"1980 2010\"\n\nsysuse census, clear\ntabulate region\n\nlabel define region_full 1 \"Northeast\" 2 \"North Central\" 3 \"South\" 4 \"West\"\nlabel values region region_full\ndecode region, generate(region_name)\n\nkeep state region region_name pop\nrename pop pop1980\nsave \"$path/temp/census1980.dta\", replace\n\n* Step 2\nimport excel \"$path/raw_data/nst-est2019-01.xlsx\", cellrange(A10:B60) clear\nrename (A B) (state pop2010)\nreplace state = subinstr(state, \".\", \"\", 1)\nsave \"$path/temp/census2010.dta\", replace\n\n* Step 3\nforeach y of global years {\n    use \"$path/temp/census`y'.dta\", clear\n    replace state = subinstr(state, \"N.\", \"North\", 1)\n    replace state = subinstr(state, \"S.\", \"South\", 1)\n    replace state = subinstr(state, \"W.\", \"West\", 1)\n    save \"$path/temp/census`y'.dta\", replace\n}\n\nuse \"$path/temp/census2010.dta\", clear\nisid state\nmerge 1:1 state using \"$path/temp/census1980.dta\"\ntabulate _merge\nlist state if _merge != 3\nkeep if _merge == 3\ndrop _merge\n\n* Step 4\ngenerate change = (pop2010 - pop1980) / pop1980 * 100\nlabel variable change \"Population change 1980-2010 (%)\"\ntabstat change, by(region_name) statistics(mean sd p50)\n\nreshape long pop, i(state) j(year)\n\n* Bonus\npreserve\ncollapse (mean) change, by(region_name)\ngraph bar change, over(region_name)\nrestore\nThe order of the labels in region_full must follow the numeric coding of region. It should be checked with tabulate region, nolabel.",
+    "crumbs": [
+      "Summary statistics"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html",
+    "href": "part4_reg.html",
+    "title": "Regression workflow",
+    "section": "",
+    "text": "This part presents a standard empirical workflow on panel data: declaring the panel structure, estimating models with fixed effects, choosing the standard errors, and reporting the results. The estimators themselves are covered in the econometrics courses. The objective here is to implement them correctly in Stata.",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#data",
+    "href": "part4_reg.html#data",
+    "title": "Regression workflow",
+    "section": "Data",
+    "text": "Data\nWe use the panel nlswork, an extract of the US National Longitudinal Survey of Young Women. It is available in the Stata web examples. Each row is a woman observed in a given year.\nwebuse nlswork, clear\n\ndescribe idcode year ln_wage tenure ttl_exp union age grade race\nxtset idcode year          // Declare the panel structure\nxtdescribe                 // Participation patterns\nsummarize ln_wage tenure ttl_exp union\nxtset declares the individual identifier and the time variable. It is required for the time-series operators (L., F., D.) and for the commands xt.",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#pooled-regression",
+    "href": "part4_reg.html#pooled-regression",
+    "title": "Regression workflow",
+    "section": "Pooled regression",
+    "text": "Pooled regression\nThe dependent variable is the logarithm of the hourly wage. The explanatory variables are job tenure, total work experience and union membership.\nregress ln_wage tenure ttl_exp i.union\n\nStandard errors\nThe default standard errors assume homoskedastic and independent errors. Observations of the same individual are correlated over time. The standard errors should then be clustered at the level of the individual.\nregress ln_wage tenure ttl_exp i.union, vce(robust)                 // Heteroskedasticity-robust\nregress ln_wage tenure ttl_exp i.union, vce(cluster idcode)         // Clustered by individual\nThe choice of the clustering level follows the sampling design and the assignment of the treatment. The reference on this question is Abadie, Athey, Imbens and Wooldridge (2023), “When Should You Adjust Standard Errors for Clustering?”, Quarterly Journal of Economics.\n\n\nInteractions and marginal effects\nThe effect of tenure may differ between union and non-union workers. The command margins computes the predicted wage at chosen values, and marginsplot plots the result.\nregress ln_wage c.tenure##i.union c.ttl_exp, vce(cluster idcode)\n\nmargins union, at(tenure = (0(5)20))\nmarginsplot, xtitle(\"Tenure (years)\") ytitle(\"Predicted log wage\") ///\n    title(\"\") legend(pos(6) cols(2))",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#fixed-effects",
+    "href": "part4_reg.html#fixed-effects",
+    "title": "Regression workflow",
+    "section": "Fixed effects",
+    "text": "Fixed effects\nIndividual fixed effects remove all time-invariant characteristics of the individuals, observed or not. Only the within-individual variation identifies the coefficients.\n\nxtreg\nxtreg ln_wage tenure ttl_exp i.union, fe vce(cluster idcode)\n\n\nreghdfe\nThe command reghdfe absorbs several sets of fixed effects efficiently. The syntax is the same as for regress, with the option absorb().\nreghdfe ln_wage tenure ttl_exp union, absorb(idcode) vce(cluster idcode)\nreghdfe ln_wage tenure ttl_exp union, absorb(idcode year) vce(cluster idcode)\nThe second command adds year fixed effects, which capture the shocks common to all individuals. The fixed effects do not appear in the output. They are reported in the table with estadd.\n\n\n\n\n\n\nWarningTime-invariant variables\n\n\n\nWith individual fixed effects, the coefficients of variables that do not vary within individuals, such as race, cannot be estimated. They are absorbed by the fixed effects. Stata omits them and reports it in the output. Variables that evolve in a deterministic way, such as age, are nearly collinear with the combination of individual and year effects.",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#report-the-results",
+    "href": "part4_reg.html#report-the-results",
+    "title": "Regression workflow",
+    "section": "Report the results",
+    "text": "Report the results\nA regression table in an economic paper reports several specifications side by side. The fixed effects are shown with a line “Yes” or “No” at the bottom of the table. The command estadd local adds such a line to the stored estimates.\nThe order matters. estadd acts on the last estimation, so it is run before eststo.\neststo clear\n\nregress ln_wage tenure ttl_exp union, vce(cluster idcode)\nestadd local ind_fe \"No\"\nestadd local year_fe \"No\"\neststo m1\n\nreghdfe ln_wage tenure ttl_exp union, absorb(idcode) vce(cluster idcode)\nestadd local ind_fe \"Yes\"\nestadd local year_fe \"No\"\neststo m2\n\nreghdfe ln_wage tenure ttl_exp union, absorb(idcode year) vce(cluster idcode)\nestadd local ind_fe \"Yes\"\nestadd local year_fe \"Yes\"\neststo m3\n\nesttab m1 m2 m3 using \"$path/output/tables/reg_wage.tex\", replace ///\n    booktabs b(%9.3f) se(%9.3f) ///\n    star(* 0.10 ** 0.05 *** 0.01) ///\n    label nomtitles ///\n    mgroups(\"Log hourly wage\", pattern(1 0 0) ///\n        prefix(\\multicolumn{@span}{c}{) suffix(}) span erepeat(\\cmidrule(lr){@span})) ///\n    stats(ind_fe year_fe N r2, ///\n        fmt(%s %s %9.0fc %9.3f) ///\n        labels(\"Individual fixed effects\" \"Year fixed effects\" \"Observations\" \"R-squared\")) ///\n    nonotes addnotes(\"Standard errors clustered by individual in parentheses.\" ///\n                     \"* p&lt;0.10, ** p&lt;0.05, *** p&lt;0.01\")\nThe option mgroups() adds a title above the columns. Its syntax is demanding and the block above can be reused as a template. A simpler alternative is mtitles(\"(1)\" \"(2)\" \"(3)\").\nThe coefficients of a variable across specifications are compared with coefplot.\ncoefplot (m1, label(\"Pooled\")) (m2, label(\"Individual FE\")) (m3, label(\"Individual and year FE\")), ///\n    keep(tenure ttl_exp) xline(0, lcolor(red)) ///\n    xtitle(\"Coefficient on log hourly wage\") legend(pos(6) cols(3))",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#beyond-the-two-way-fixed-effects-model",
+    "href": "part4_reg.html#beyond-the-two-way-fixed-effects-model",
+    "title": "Regression workflow",
+    "section": "Beyond the two-way fixed effects model",
+    "text": "Beyond the two-way fixed effects model\nDifference-in-differences and event-study designs are widely used in applied work. When the treatment is staggered over time, the standard two-way fixed effects estimator can be biased. Several estimators have been proposed and are implemented in user-written packages, among others csdid (Callaway and Sant’Anna), did_multiplegt (de Chaisemartin and D’Haultfœuille), eventstudyinteract (Sun and Abraham) and did_imputation (Borusyak, Jaravel and Spiess). They are not covered in this course.",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  },
+  {
+    "objectID": "part4_reg.html#exercise",
+    "href": "part4_reg.html#exercise",
+    "title": "Regression workflow",
+    "section": "Exercise",
+    "text": "Exercise\n\n\n\n\n\n\nTipExercise\n\n\n\nUsing nlswork:\n\nRegress ln_wage on tenure and ttl_exp with standard errors clustered by individual\nAdd the controls age, grade and i.race. Is the coefficient of tenure stable?\nAdd individual fixed effects with reghdfe. What happens to race? Why is the coefficient of grade identified by few observations only?\nAdd year fixed effects\nExport a table with the four specifications and two lines indicating the fixed effects\nPlot the coefficient of tenure across the four specifications\n\n\n\n\n\n\n\n\n\nNoteSolution\n\n\n\n\n\nwebuse nlswork, clear\nxtset idcode year\neststo clear\n\nregress ln_wage tenure ttl_exp, vce(cluster idcode)\nestadd local ind_fe \"No\"\nestadd local year_fe \"No\"\neststo m1\n\nregress ln_wage tenure ttl_exp age grade i.race, vce(cluster idcode)\nestadd local ind_fe \"No\"\nestadd local year_fe \"No\"\neststo m2\n\nreghdfe ln_wage tenure ttl_exp age grade i.race, absorb(idcode) vce(cluster idcode)\nestadd local ind_fe \"Yes\"\nestadd local year_fe \"No\"\neststo m3\n\nreghdfe ln_wage tenure ttl_exp age grade i.race, absorb(idcode year) vce(cluster idcode)\nestadd local ind_fe \"Yes\"\nestadd local year_fe \"Yes\"\neststo m4\n\nesttab m1 m2 m3 m4 using \"$path/output/tables/reg_wage_exercise.tex\", replace ///\n    booktabs b(%9.3f) se(%9.3f) star(* 0.10 ** 0.05 *** 0.01) ///\n    stats(ind_fe year_fe N r2, fmt(%s %s %9.0fc %9.3f) ///\n        labels(\"Individual fixed effects\" \"Year fixed effects\" \"Observations\" \"R-squared\"))\n\ncoefplot m1 m2 m3 m4, keep(tenure) xline(0) legend(pos(6) cols(4))\nThe variable race is constant within individuals and is dropped in the fixed effects specifications. The variable grade varies within individuals for a small number of women only, so its coefficient rests on little variation. In the last specification, age is nearly collinear with the individual and year effects (age is approximately the year minus the year of birth). Its standard error is large and the coefficient is not interpretable.",
+    "crumbs": [
+      "Regression workflow"
+    ]
+  }
+]
