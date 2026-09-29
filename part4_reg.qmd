@@ -1,0 +1,183 @@
+---
+title: "Regression workflow"
+---
+
+This part presents a standard empirical workflow on panel data: declaring the panel structure, estimating models with fixed effects, choosing the standard errors, and reporting the results. The estimators themselves are covered in the econometrics courses. The objective here is to implement them correctly in Stata.
+
+## Data
+
+We use the panel `nlswork`, an extract of the US National Longitudinal Survey of Young Women. It is available in the Stata web examples. Each row is a woman observed in a given year.
+
+``` stata
+webuse nlswork, clear
+
+describe idcode year ln_wage tenure ttl_exp union age grade race
+xtset idcode year          // Declare the panel structure
+xtdescribe                 // Participation patterns
+summarize ln_wage tenure ttl_exp union
+```
+
+`xtset` declares the individual identifier and the time variable. It is required for the time-series operators (`L.`, `F.`, `D.`) and for the commands `xt`.
+
+## Pooled regression
+
+The dependent variable is the logarithm of the hourly wage. The explanatory variables are job tenure, total work experience and union membership.
+
+``` stata
+regress ln_wage tenure ttl_exp i.union
+```
+
+### Standard errors
+
+The default standard errors assume homoskedastic and independent errors. Observations of the same individual are correlated over time. The standard errors should then be clustered at the level of the individual.
+
+``` stata
+regress ln_wage tenure ttl_exp i.union, vce(robust)                 // Heteroskedasticity-robust
+regress ln_wage tenure ttl_exp i.union, vce(cluster idcode)         // Clustered by individual
+```
+
+The choice of the clustering level follows the sampling design and the assignment of the treatment. The reference on this question is Abadie, Athey, Imbens and Wooldridge (2023), "When Should You Adjust Standard Errors for Clustering?", *Quarterly Journal of Economics*.
+
+### Interactions and marginal effects
+
+The effect of tenure may differ between union and non-union workers. The command `margins` computes the predicted wage at chosen values, and `marginsplot` plots the result.
+
+``` stata
+regress ln_wage c.tenure##i.union c.ttl_exp, vce(cluster idcode)
+
+margins union, at(tenure = (0(5)20))
+marginsplot, xtitle("Tenure (years)") ytitle("Predicted log wage") ///
+    title("") legend(pos(6) cols(2))
+```
+
+## Fixed effects
+
+Individual fixed effects remove all time-invariant characteristics of the individuals, observed or not. Only the within-individual variation identifies the coefficients.
+
+### `xtreg`
+
+``` stata
+xtreg ln_wage tenure ttl_exp i.union, fe vce(cluster idcode)
+```
+
+### `reghdfe`
+
+The command `reghdfe` absorbs several sets of fixed effects efficiently. The syntax is the same as for `regress`, with the option `absorb()`.
+
+``` stata
+reghdfe ln_wage tenure ttl_exp union, absorb(idcode) vce(cluster idcode)
+reghdfe ln_wage tenure ttl_exp union, absorb(idcode year) vce(cluster idcode)
+```
+
+The second command adds year fixed effects, which capture the shocks common to all individuals. The fixed effects do not appear in the output. They are reported in the table with `estadd`.
+
+::: {.callout-warning}
+## Time-invariant variables
+
+With individual fixed effects, the coefficients of variables that do not vary within individuals, such as `race`, cannot be estimated. They are absorbed by the fixed effects. Stata omits them and reports it in the output. Variables that evolve in a deterministic way, such as age, are nearly collinear with the combination of individual and year effects.
+:::
+
+## Report the results
+
+A regression table in an economic paper reports several specifications side by side. The fixed effects are shown with a line "Yes" or "No" at the bottom of the table. The command `estadd local` adds such a line to the stored estimates.
+
+The order matters. `estadd` acts on the last estimation, so it is run *before* `eststo`.
+
+``` stata
+eststo clear
+
+regress ln_wage tenure ttl_exp union, vce(cluster idcode)
+estadd local ind_fe "No"
+estadd local year_fe "No"
+eststo m1
+
+reghdfe ln_wage tenure ttl_exp union, absorb(idcode) vce(cluster idcode)
+estadd local ind_fe "Yes"
+estadd local year_fe "No"
+eststo m2
+
+reghdfe ln_wage tenure ttl_exp union, absorb(idcode year) vce(cluster idcode)
+estadd local ind_fe "Yes"
+estadd local year_fe "Yes"
+eststo m3
+
+esttab m1 m2 m3 using "$path/output/tables/reg_wage.tex", replace ///
+    booktabs b(%9.3f) se(%9.3f) ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    label nomtitles ///
+    mgroups("Log hourly wage", pattern(1 0 0) ///
+        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
+    stats(ind_fe year_fe N r2, ///
+        fmt(%s %s %9.0fc %9.3f) ///
+        labels("Individual fixed effects" "Year fixed effects" "Observations" "R-squared")) ///
+    nonotes addnotes("Standard errors clustered by individual in parentheses." ///
+                     "* p<0.10, ** p<0.05, *** p<0.01")
+```
+
+The option `mgroups()` adds a title above the columns. Its syntax is demanding and the block above can be reused as a template. A simpler alternative is `mtitles("(1)" "(2)" "(3)")`.
+
+The coefficients of a variable across specifications are compared with `coefplot`.
+
+``` stata
+coefplot (m1, label("Pooled")) (m2, label("Individual FE")) (m3, label("Individual and year FE")), ///
+    keep(tenure ttl_exp) xline(0, lcolor(red)) ///
+    xtitle("Coefficient on log hourly wage") legend(pos(6) cols(3))
+```
+
+## Beyond the two-way fixed effects model
+
+Difference-in-differences and event-study designs are widely used in applied work. When the treatment is staggered over time, the standard two-way fixed effects estimator can be biased. Several estimators have been proposed and are implemented in user-written packages, among others `csdid` (Callaway and Sant'Anna), `did_multiplegt` (de Chaisemartin and D'Haultfœuille), `eventstudyinteract` (Sun and Abraham) and `did_imputation` (Borusyak, Jaravel and Spiess). They are not covered in this course.
+
+## Exercise
+
+::: {.callout-tip}
+## Exercise
+
+Using `nlswork`:
+
+1.  Regress `ln_wage` on `tenure` and `ttl_exp` with standard errors clustered by individual
+2.  Add the controls `age`, `grade` and `i.race`. Is the coefficient of `tenure` stable?
+3.  Add individual fixed effects with `reghdfe`. What happens to `race`? Why is the coefficient of `grade` identified by few observations only?
+4.  Add year fixed effects
+5.  Export a table with the four specifications and two lines indicating the fixed effects
+6.  Plot the coefficient of `tenure` across the four specifications
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+webuse nlswork, clear
+xtset idcode year
+eststo clear
+
+regress ln_wage tenure ttl_exp, vce(cluster idcode)
+estadd local ind_fe "No"
+estadd local year_fe "No"
+eststo m1
+
+regress ln_wage tenure ttl_exp age grade i.race, vce(cluster idcode)
+estadd local ind_fe "No"
+estadd local year_fe "No"
+eststo m2
+
+reghdfe ln_wage tenure ttl_exp age grade i.race, absorb(idcode) vce(cluster idcode)
+estadd local ind_fe "Yes"
+estadd local year_fe "No"
+eststo m3
+
+reghdfe ln_wage tenure ttl_exp age grade i.race, absorb(idcode year) vce(cluster idcode)
+estadd local ind_fe "Yes"
+estadd local year_fe "Yes"
+eststo m4
+
+esttab m1 m2 m3 m4 using "$path/output/tables/reg_wage_exercise.tex", replace ///
+    booktabs b(%9.3f) se(%9.3f) star(* 0.10 ** 0.05 *** 0.01) ///
+    stats(ind_fe year_fe N r2, fmt(%s %s %9.0fc %9.3f) ///
+        labels("Individual fixed effects" "Year fixed effects" "Observations" "R-squared"))
+
+coefplot m1 m2 m3 m4, keep(tenure) xline(0) legend(pos(6) cols(4))
+```
+
+The variable `race` is constant within individuals and is dropped in the fixed effects specifications. The variable `grade` varies within individuals for a small number of women only, so its coefficient rests on little variation. In the last specification, age is nearly collinear with the individual and year effects (age is approximately the year minus the year of birth). Its standard error is large and the coefficient is not interpretable.
+:::

@@ -1,0 +1,190 @@
+---
+title: "Debugging clinic"
+---
+
+Errors are a normal part of programming. This part presents a method to diagnose them, the most frequent error messages in Stata, and the organisation of a project that can be reproduced by a third party.
+
+## Read the error message
+
+When a command fails, Stata prints a message in red followed by a return code, for instance `r(111)`. The execution of the do-file stops at this line. The message and the code identify the problem.
+
+| Code | Message | Frequent cause |
+|:----:|:--------|:---------------|
+| `r(3)` | no dataset in use | No data loaded, or `clear all` executed before the command |
+| `r(9)` | assertion is false | A check written with `assert` failed |
+| `r(100)` | varlist required | A command requiring variables receives an empty list, for instance from an empty local macro |
+| `r(109)` | type mismatch | A string variable is compared with a number, or the reverse |
+| `r(110)` | variable already defined | `generate` used on an existing name. Use `replace` or `capture drop` |
+| `r(111)` | variable not found | Typo, wrong case (Stata is case sensitive), wrong dataset in memory |
+| `r(198)` | invalid syntax | Missing comma, misspelt option, unbalanced parenthesis or quotation mark |
+| `r(199)` | unrecognized command | Misspelt command, or package not installed |
+| `r(459)` | variable does not uniquely identify observations | Failed `isid` or `merge` on a key with duplicates |
+| `r(601)` | file not found | Wrong path or file name |
+| `r(602)` | file already exists | `save` or `export` without the option `replace` |
+| `r(2000)` | no observations | The `if` condition selects nothing |
+
+The description of a return code is obtained with `search r(111)`.
+
+## A method
+
+1.  **Read** the message and identify the line that failed
+2.  **Isolate** the problem. Execute the code line by line and comment out what is not needed
+3.  **Inspect** the state of the data at the point of failure, with `describe`, `list in 1/5`, `summarize`, `tabulate, missing` or `display`
+4.  **Simplify**. Reproduce the error on a built-in dataset, with the smallest possible code
+5.  **Trace**. When the error is inside a loop or a program, `set trace on` prints each line executed and `set trace off` stops it. The option `set tracedepth 1` limits the level of detail
+6.  **Search** in the documentation with `help` and `search`. Then look for the exact message online, for instance on Statalist
+
+``` stata
+* Inspect the value of a local inside a loop
+foreach v of varlist price mpg {
+    display "Current variable: `v'"
+    summarize `v'
+}
+```
+
+### `capture`
+
+The prefix `capture` suppresses the error and stores its return code in `_rc`.
+
+``` stata
+capture confirm variable price
+if _rc != 0 {
+    display "The variable price does not exist"
+}
+```
+
+`capture` is appropriate when a failure is expected, for instance `capture drop varname` before a `generate`. It should not be used to silence errors that are not understood, since the code then continues on a wrong state.
+
+## Silent errors
+
+The most dangerous errors do not produce any message. The result is wrong but the code runs. The following are the most frequent.
+
+-   Missing values treated as large numbers in comparisons (see Part 0 and Part 1)
+-   A local macro that is empty, so that `summarize` `` `vars' `` summarises *all* variables
+-   A merge that does not match all observations, or `m:m`
+-   A `replace` with a condition that is more general than intended
+-   A sample that changes between two regressions because of missing values. The number of observations should be compared across columns of a table
+
+Systematic checks limit these risks: `assert`, `isid`, `count`, `tabulate, missing`, `misstable summarize`.
+
+## Exercise
+
+Each block below contains one error. For each of them, predict the message, run the code and correct it.
+
+::: {.callout-tip}
+## Exercise
+
+``` stata
+* Block 1
+sysuse auto, clear
+regress price Mpg
+
+* Block 2
+summarize price, detials
+
+* Block 3
+generate price = price / 1000
+
+* Block 4
+keep if foreign == "Foreign"
+
+* Block 5
+save "$path/temp/auto_clean.dta"
+save "$path/temp/auto_clean.dta"
+
+* Block 6 (no error message: what is wrong?)
+sysuse auto, clear
+generate good_record = rep78 > 3
+tabulate good_record rep78, missing
+
+* Block 7 (run the two lines separately: what is wrong?)
+local vars price mpg
+summarize `vars'
+```
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+1.  `r(111)`. The variable is `mpg`. Stata is case sensitive
+2.  `r(198)`. The option is `detail`
+3.  `r(110)`. The variable `price` exists. Use a new name or `replace`
+4.  `r(109)`. The variable `foreign` is numeric. The condition is `foreign == 1`. The label is printed by `tabulate` but is not the value
+5.  `r(602)` at the second line. Add the option `replace`
+6.  The variable `rep78` has missing values, which are coded as larger than 3. The observations with a missing repair record are assigned `good_record = 1`. The correct code is `generate good_record = rep78 > 3 if !missing(rep78)`
+7.  When the lines are executed separately, the local `vars` does not exist in the second execution. The command `summarize` with an empty list summarises all the variables and no error is displayed
+:::
+
+## Reproducibility
+
+A project is reproducible if a third party can obtain all the results from the raw data, by running one file. This is required by most economics journals and is, above all, the best protection for the author against errors.
+
+### Master do-file
+
+The master do-file defines the environment, installs the packages and runs the scripts in order. It is the only file that has to be modified to run the project on another computer.
+
+``` stata
+/*==========================================================================
+    MASTER DO-FILE
+    Project : Introduction to Stata
+    Purpose : Run all the scripts in order
+==========================================================================*/
+
+clear all
+set more off
+set varabbrev off
+version 17                 // Oldest version supported. It must not exceed the installed one
+capture log close
+
+* ===== 1. Paths =====
+
+* The only lines to modify: one line per user
+if "`c(username)'" == "mmoglia" {
+    global path "C:/Users/mmoglia/courses/2026_eco51423ep"
+}
+else if "`c(username)'" == "student" {
+    global path "C:/Users/student/courses/2026_eco51423ep"
+}
+
+global code   "$path/code"
+global raw    "$path/raw_data"
+global temp   "$path/temp"
+global output "$path/output"
+global logs   "$path/logs"
+
+* ===== 2. Run =====
+
+log using "$logs/master.smcl", replace
+
+do "$code/0_install_packages.do"
+do "$code/1_clean_data.do"
+do "$code/2_merge_datasets.do"
+do "$code/3_analysis.do"
+
+log close
+```
+
+### Rules
+
+-   All paths are built from `$path`, none is written in full in the scripts
+-   The raw data are never modified. Every transformation is performed by a script
+-   Each script starts from the data it needs and does not depend on the state left by another script in memory
+-   The scripts are numbered in the order of execution
+-   Randomness is controlled with `set seed`. Commands involving random draws, such as `sample`, start from a sorted dataset, so that the result does not depend on the initial order
+-   The installed packages and the version are documented (`about`, `ado dir`, `which estout`)
+-   A `README` file describes the folder structure, the sources of the data and the order of execution
+
+``` stata
+set seed 20260928
+sort id            // Requires a variable id
+sample 10          // Keep 10% of the observations
+```
+
+## Further resources
+
+-   The Stata documentation, accessible from `help` and in PDF
+-   [Statalist](https://www.statalist.org), the reference forum. Search before posting
+-   The [Stata Journal](https://www.stata-journal.com) and the Stata Tips
+-   The [DIME Analytics Data Handbook](https://worldbank.github.io/dime-data-handbook/) of the World Bank
+-   The [Library of Statistical Translation](https://lost-stats.github.io/), which gives equivalent code in Stata, R and Python
+-   The [UCLA OARC Stata resources](https://stats.oarc.ucla.edu/stata/)

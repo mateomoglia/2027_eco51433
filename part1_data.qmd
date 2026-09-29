@@ -1,0 +1,494 @@
+---
+title: "Data manipulation"
+---
+
+This part covers the core data management tasks: opening files, cleaning and creating variables, using macros and loops, reshaping datasets and combining them. We use built-in Stata datasets and a small number of online files.
+
+## Open and save data
+
+The built-in datasets are opened with `sysuse`. Other formats require the following commands.
+
+``` stata
+* Built-in datasets
+sysuse auto, clear
+
+* Stata format (.dta)
+use "$path/raw_data/mydata.dta", clear
+
+* Excel files
+import excel "$path/raw_data/mydata.xlsx", sheet("Sheet1") firstrow clear
+
+* Delimited files (.csv, .txt)
+import delimited "$path/raw_data/mydata.csv", delimiter(",") varnames(1) clear
+
+* Files available online
+use "https://www.stata.com/users/youtube/rawdata.dta", clear
+
+* Save the dataset in memory
+save "$path/temp/mydata_clean.dta", replace
+```
+
+::: {.callout-tip}
+Stata does not overwrite the data in memory by default. The option `clear` is required to load a dataset when another one is already open. Similarly, `save` requires the option `replace` to overwrite an existing file.
+:::
+
+## Describe the data
+
+For this section, we use the dataset `rawdata.dta`, which contains health information on individuals. The variable names follow the original file. They should be checked with `describe` before use.
+
+::: {.callout-tip}
+## Exercise
+
+Open a do-file, start with `clear all` and follow the instructions:
+
+1.  Open the file `rawdata.dta` with the link above
+2.  Use `browse` to inspect the data
+3.  Use `describe` to inspect the format of the variables
+4.  Use `count` to print the number of observations
+5.  Use `tabulate` to print a frequency table for `sex`
+6.  Use `summarize` to print summary statistics for the cholesterol concentration (`chol`). What is the issue?
+:::
+
+## Data cleaning
+
+The dataset requires cleaning. We proceed step by step.
+
+### Keep and drop
+
+Assume that we keep individuals aged more than 25, which is equivalent to dropping those aged 25 or less.
+
+``` stata
+keep if age > 25 & !missing(age)
+* Equivalent: drop if age <= 25 | missing(age)
+```
+
+::: {.callout-warning}
+## Missing values
+
+In Stata, a missing value is larger than any number. Without the condition `!missing(age)`, the command `keep if age > 25` retains the observations with a missing age. The same rule applies to `generate` and `replace` with inequalities (see below).
+:::
+
+Observations with a missing date of birth are dropped. The sample is then restricted to two racial groups.
+
+``` stata
+drop if missing(dob)
+keep if inlist(race, "White", "Black")
+* Equivalent if "Other" is the only other category: drop if race == "Other"
+```
+
+### Change the format of a variable
+
+The cholesterol concentration is stored as a string and should be numeric. Before converting, we identify the entries that prevent the conversion.
+
+``` stata
+list chol if missing(real(chol)) & !missing(chol)   // Non-numeric entries
+destring chol, replace                              // Convert in place
+destring chol, generate(chol_num)                   // Or create a new variable
+```
+
+The related commands are `tostring` (numeric to string), `encode` (string to labelled numeric) and `decode` (labelled numeric to string).
+
+### Variable labels and value labels
+
+A variable label describes a variable. A value label describes the values of a categorical variable. Some variables of the dataset have no label. Using `label variable`, we label `age` and `dob`.
+
+``` stata
+label variable age "Age (years)"
+label variable dob "Date of birth"
+```
+
+The variable `sex` takes the values 0 (female) and 1 (male). To print these names instead of the numbers, we define a value label and attach it to the variable.
+
+``` stata
+label define sex_lab 0 "Female" 1 "Male"
+label values sex sex_lab
+
+tabulate sex        // Check
+tabulate sex, nolabel   // Display the underlying values
+```
+
+### Create variables
+
+The command `generate` creates a variable and `replace` modifies an existing one. We build a dummy variable for race.
+
+``` stata
+generate race_dummy = .                   // Create an empty variable
+replace race_dummy = 1 if race == "White"
+replace race_dummy = 0 if race == "Black"
+```
+
+A dummy variable can also be created in one line. The comparison returns 1 if true and 0 otherwise.
+
+``` stata
+generate white = (race == "White") if !missing(race)
+```
+
+### Grouping variable 1: bins
+
+The cholesterol concentration is heterogeneous:
+
+``` stata
+. summarize chol
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+        chol |      1,266    216.4415    46.84972         89        426
+```
+
+We want to assign each individual to a bin of width 10, identified by its lower bound. Two approaches exist, a built-in function and a loop. Note that `round(chol, 10)` would assign the *nearest* multiple of 10, which is different.
+
+``` stata
+* Built-in function
+generate floored_chol = floor(chol/10)*10
+```
+
+``` stata
+* Loop
+generate floored_chol_loop = .
+forvalues x = 80(10)420 {
+    replace floored_chol_loop = `x' if chol >= `x' & chol < `x' + 10
+}
+```
+
+The loop is read as follows:
+
+-   `generate` creates an empty numeric variable
+-   `forvalues x = 80(10)420 {` opens a loop where the running variable `x` goes from 80 to 420 with a step of 10
+-   `replace` assigns the value `x` to the observations whose `chol` lies in the interval $[x, x+10)$
+-   `}` closes the loop. The brace `{` must be the last character of the first line and `}` must be alone on its line.
+
+Two remarks:
+
+1.  The function `inrange(chol, x, x + 9)` is inclusive on both sides. Why is it inappropriate when `chol` is not an integer?
+2.  Which of the two approaches is the most efficient? When is a loop justified?
+
+### Grouping variable 2: comparison with the mean
+
+We want a variable equal to 1 if the weight is above the mean and 0 otherwise.
+
+::: {.callout-tip}
+## Exercise
+
+Create the variable in three steps:
+
+1.  Compute the mean of `weight`
+2.  Generate a variable containing this mean, with `egen new_var = mean(var)`
+3.  Generate the dummy variable. Pay attention to missing values.
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+egen weight_mean = mean(weight)
+generate weight_above = (weight > weight_mean) if !missing(weight)
+```
+
+A shorter version using stored results is presented in the next section.
+:::
+
+### Grouping variable 3: statistics by group
+
+We now want to identify individuals whose cholesterol concentration exceeds the 3rd quartile *of their own age class*. The prefix `by` computes a statistic within groups. It is used in two ways:
+
+-   As a prefix, after sorting: `bysort age_class: command`. The prefix is equivalent to `by age_class, sort: command`.
+-   As an option, for the commands that allow it: `egen ..., by(age_class)`.
+
+The prefix is more general and works with most commands.
+
+::: {.callout-tip}
+## Exercise
+
+1.  Create the variable `age_class`, equal to the lower bound of the decade of age
+2.  Compute the 75th percentile of `chol` within each age class, with `egen` and the function `pctile()`
+3.  Create the dummy `chol_high`, equal to 1 if `chol` is above this threshold
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+generate age_class = floor(age/10)*10
+bysort age_class: egen chol_p75 = pctile(chol), p(75)
+generate chol_high = (chol > chol_p75) if !missing(chol)
+tabulate age_class chol_high, row
+```
+:::
+
+## Stored results, locals and globals
+
+Three objects should not be confused.
+
+**Stored results.** After most commands, Stata stores results in memory. The results of descriptive commands are `r()` and those of estimation commands are `e()`. They are listed with `return list` and `ereturn list`. They are overwritten by the next command of the same class.
+
+**Local macros.** A local macro is a named piece of text. It is defined with `local` and called between a backtick and an apostrophe, `` `name' ``. It exists only during the current execution of the do-file.
+
+**Global macros.** A global macro is defined with `global` and called with `$name` (or `${name}`). It persists until Stata is closed.
+
+``` stata
+quietly summarize weight
+return list                                  // Results stored by summarize
+
+generate weight_above2 = (weight > r(mean)) if !missing(weight)
+
+local threshold = r(mean)                    // Copy a stored result in a local
+display "Mean weight: `threshold'"
+```
+
+::: {.callout-warning}
+## Execution of locals
+
+A local macro disappears when the execution ends. If a do-file is run by selecting and executing lines separately, each execution is independent. A local defined in the first execution is empty in the second one. The command then fails, or worse, runs silently on an empty argument. Blocks that use locals must be selected and executed together.
+:::
+
+Stored results can also be used in the loop presented above, which then adapts to the range of the data:
+
+``` stata
+use "https://www.stata.com/users/youtube/rawdata.dta", clear
+destring chol, replace
+
+capture drop floored_chol
+generate floored_chol = .
+
+quietly summarize chol
+local min_chol = floor(r(min)/10)*10
+local max_chol = ceil(r(max)/10)*10
+local step = 10
+
+forvalues x = `min_chol'(`step')`max_chol' {
+    quietly replace floored_chol = `x' if chol >= `x' & chol < `x' + `step'
+}
+```
+
+Globals store information for a longer period. The path of the working directory is the typical example.
+
+``` stata
+global path "C:/Users/username/courses/2026_eco51423ep"
+global sexes "Male Female"
+
+use "$path/raw_data/mydata.dta", clear
+```
+
+Text macros are defined without the sign `=`. With `=`, Stata evaluates an expression, which imposes a length limit on strings.
+
+## Loops
+
+We have seen loops over numbers with `forvalues`. The command `foreach` loops over other objects, in particular lists.
+
+``` stata
+* Over the variables of a list
+foreach x of varlist weight chol {
+    summarize `x'
+}
+
+* Over a list of words
+foreach x in Male Female {
+    display "`x'"
+}
+
+* Over the elements of a global or a local
+foreach x of global sexes {
+    display "`x'"
+}
+```
+
+::: {.callout-warning}
+The syntax `foreach x in "a b c"` loops over *one* element, the string `a b c`. The quotation marks must be removed to loop over three elements.
+:::
+
+The command `levelsof` stores the distinct values of a variable in a local. It is useful to loop over the categories of a variable.
+
+``` stata
+levelsof race, local(races) clean
+foreach r of local races {
+    display "Mean weight, race = `r':"
+    summarize weight if race == "`r'"
+}
+```
+
+## Strings and dates
+
+String variables are frequent in raw data. In the health dataset, the date of birth is stored as a string. We first inspect the format.
+
+``` stata
+list dob in 1/5
+```
+
+The following functions are used to extract elements of a string.
+
+``` stata
+generate month3 = strupper(substr(dob, 1, 3))     // First three letters, upper case
+generate first_word = word(dob, 1)                // First word
+generate first_word2 = substr(dob, 1, strpos(dob, " ") - 1)   // Equivalent
+```
+
+-   `substr(s, n1, n2)` returns `n2` characters starting at position `n1`. The third argument is a length, not an end position.
+-   `strpos(s, t)` returns the position of the string `t` in `s`, and 0 if it is absent.
+-   `word(s, n)` returns the `n`th word, words being separated by spaces.
+-   Other useful functions: `strlen`, `strtrim`, `strlower`, `subinstr`, `regexm`. The command `split` separates a string into several variables.
+
+A date stored as a string cannot be used in computations. It is converted with `date()` and displayed with a date format. The mask (here `MDY`) must match the format of the string.
+
+``` stata
+generate dob_date = date(dob, "MDY")
+format dob_date %td
+generate birth_year = year(dob_date)
+```
+
+## Reshape, collapse, merge and append
+
+For this section, we use the built-in dataset `uslifeexp.dta`. It contains, for each year, the life expectancy of the overall population (`le`), and by gender, race and gender-race.
+
+### Reshape
+
+The dataset is in *wide* format: each row is a year and each group has its own column. We want a *long* format, with one row per year and per group. This operation is called reshaping.
+
+``` stata
+sysuse uslifeexp, clear
+describe
+
+rename le le_all                 // The overall series must follow the pattern le_*
+reshape long le_, i(year) j(group) string
+rename le_ le
+```
+
+The syntax is as follows:
+
+-   `reshape long` converts from wide to long and `reshape wide` from long to wide
+-   `le_` is the *stub*, the common beginning of the names of the variables to reshape
+-   `i()` contains the identifier of the observation, which does not change
+-   `j()` is the name of the new variable, which contains the suffixes of the variables (here the groups)
+-   `string` is required if the suffixes contain letters
+
+The dataset now has three columns: `year`, `group` and `le`. The command `reshape wide le, i(year) j(group) string` reverses the operation.
+
+### Collapse
+
+We want the average life expectancy by group and by decade. We create the decade and use `collapse`.
+
+``` stata
+generate decade = floor(year/10)*10
+collapse (mean) le, by(decade group)
+```
+
+`collapse` replaces the dataset in memory by a dataset of statistics. Other statistics are available: `median`, `sd`, `count`, `min`, `max`. Several statistics can be computed at once, for instance `collapse (mean) le_mean = le (sd) le_sd = le, by(decade group)`. The command is destructive and is usually placed between `preserve` and `restore` (see below).
+
+### Merge
+
+Two datasets are joined with `merge`. One of them is in memory (the *master*) and the other is on disk (the *using* dataset). The syntax is:
+
+``` stata
+merge 1:1 state using "$path/temp/census1980.dta"
+```
+
+The type of merge describes the relation between the observations of the two datasets:
+
+-   `1:1`: each key appears at most once in each dataset
+-   `m:1`: several observations of the master share the same key in the using dataset
+-   `1:m`: the reverse of `m:1`
+-   `m:m`: not to be used. The result is arbitrary and the Stata manual advises against it.
+
+`merge` creates the variable `_merge`, which tags the origin of each observation.
+
+| Value | Meaning |
+|:-----:|:--------|
+| 1 | in the master only |
+| 2 | in the using dataset only |
+| 3 | in both (matched) |
+
+A rigorous merge follows a fixed routine. The uniqueness of the key is checked before the merge and the outcome is verified after.
+
+``` stata
+isid state                                        // Fails if state is not unique
+merge 1:1 state using "$path/temp/census1980.dta", gen(merge_census)
+tabulate merge_census                             // Inspect the outcome
+list state if merge_census != 3                   // Identify the problem
+keep if merge_census == 3                         // Or: assert merge_census == 3
+drop merge_census
+```
+
+The options `keep(match)`, `keepusing(varlist)`, `assert(match)` and `nogenerate` shorten this routine. An exercise on `merge` is proposed in Part 2.
+
+### Append
+
+`append` stacks two datasets. The variables are matched by name. A variable absent from one dataset is filled with missing values (`.` for numeric variables and an empty string for string variables).
+
+``` stata
+append using "$path/temp/census2010.dta", generate(source)
+```
+
+The option `generate()` creates a variable identifying the origin of each observation. Variables with the same name but different types (numeric and string) generate an error.
+
+## Temporary datasets
+
+It is sometimes convenient to store a dataset in memory temporarily.
+
+### `tempfile`
+
+A subset of the data is saved in a temporary file, without writing it on the disk, and appended to another one. Temporary files are local macros and the warning above applies: the block is executed as a whole.
+
+``` stata
+use "$path/raw_data/data.dta", clear
+drop if gender == 0
+* ... cleaning ...
+
+tempfile males
+save `males'
+
+use "$path/raw_data/data.dta", clear
+drop if gender == 1
+* ... cleaning ...
+
+append using `males'
+```
+
+### `preserve` and `restore`
+
+To compute an intermediary statistic, save it, and go back to the main dataset, the data are preserved and then restored.
+
+``` stata
+sysuse auto, clear
+
+* ... code ...
+
+preserve
+collapse (mean) price, by(foreign)
+save "$path/temp/price_by_foreign.dta", replace
+restore
+
+* ... the code continues on the original dataset ...
+```
+
+## Frames
+
+Since Stata 16, several datasets can be held in memory in *frames*. The dataset opened at the start of a session is in the frame `default`.
+
+``` stata
+frame create census                                    // Create a frame
+frame census: use "$path/temp/census1980.dta", clear   // Load data in it
+frames dir                                             // List the frames
+
+frame change census                                    // Move to the frame
+frame change default                                   // Come back
+
+* Bring a variable from another frame, without merge
+frlink m:1 state, frame(census)
+frget pop1980, from(census)
+
+frame drop census
+```
+
+Frames avoid the repeated saving and loading of temporary files. `merge` remains the standard tool and is the one used in the exercises.
+
+## Data quality checks
+
+Checks are included in the do-file, not only performed interactively. A command that fails stops the execution and signals the problem.
+
+``` stata
+isid id                                  // Fails if id does not identify the observations
+duplicates report id                     // Number of duplicates
+assert age >= 0 & age < 120 if !missing(age)   // Fails if the condition is false
+misstable summarize                      // Missing values by variable
+codebook, compact                        // Compact description of all variables
+compress                                 // Reduce the storage size of the variables
+```

@@ -1,0 +1,478 @@
+---
+title: "Data visualisation"
+---
+
+This part covers the main graph types in Stata. Part of the material is adapted from [this Princeton tutorial](https://libguides.princeton.edu/visualization_stata). Variable names of the online datasets follow the original files and should be checked with `describe`.
+
+## General remarks
+
+The standard syntax of a graph command is `graph_command variable, options`. Several plots are overlaid with `twoway`, for instance a bar chart and a line, or a scatter plot and a fitted line:
+
+``` stata
+twoway (graph_command1 var1, options1) (graph_command2 var2, options2), general_options
+```
+
+`twoway` can be abbreviated `tw`. The options placed inside a parenthesis apply to one plot. The options placed after the last parenthesis apply to the whole graph.
+
+Good practice for graphs:
+
+-   Label the axes with the variable and its unit
+-   Include a legend when several series are shown, and omit it otherwise
+-   Keep one message per graph and limit the amount of information
+-   Use colours that remain readable in black and white and for colour-blind readers
+
+### Schemes
+
+A *scheme* defines the general look of a graph. The list of official schemes is documented [here](https://www.stata.com/manuals/g-4schemesintro.pdf). The package `blindschemes` adds schemes with colour-blind safe palettes, such as `plotplain` and `plottig`.
+
+``` stata
+ssc install blindschemes, replace
+set scheme plotplain
+```
+
+### Export
+
+A graph is exported with `graph export`. The vector format `.pdf` is preferred for LaTeX documents.
+
+``` stata
+graph export "$path/output/figures/my_graph.pdf", replace
+graph export "$path/output/figures/my_graph.png", replace width(2000)
+```
+
+## Scatter plots
+
+The command is `scatter`, abbreviated `sc`. It requires two variables, `y` then `x`, in this order. We use trade data for the year 2012.
+
+``` stata
+use "https://dss.princeton.edu/training/wdipol.dta", clear
+keep if year == 2012
+
+scatter import export            // Levels: the graph is hardly readable
+
+generate limport = log(import)   // Logarithms improve readability
+generate lexport = log(export)
+```
+
+We now choose the colour, the symbol and the width of the symbol, and label the axes.
+
+``` stata
+scatter limport lexport, ///
+    mcolor(cranberry) msymbol(Oh) mlwidth(0.1) ///
+    xtitle("Exports (USD, log)") ytitle("Imports (USD, log)")
+```
+
+The same graph with abbreviated options:
+
+``` stata
+sc limport lexport, mc(cranberry) m(Oh) mlw(0.1) xti("Exports (USD, log)") yti("Imports (USD, log)")
+```
+
+Abbreviations are convenient when exploring the data. Complete options are preferred in a do-file.
+
+Markers can be labelled with the option `mlabel()`. The labels are readable only for a small number of observations.
+
+``` stata
+scatter limport lexport if inlist(country, "France", "Germany", "Italy", "Spain"), ///
+    mcolor(cranberry) mlabel(country) mlabposition(3)
+```
+
+::: {.callout-tip}
+## Exercise
+
+Starting from the scatter plot of `limport` on `lexport`, add a regression line.
+
+1.  Overlay a second plot with `(lfit y x)`
+2.  Give the line the same colour as the points
+3.  Adapt the legend with the option `order()`, and place it at the bottom
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+twoway (scatter limport lexport, mcolor(cranberry) msymbol(Oh) mlwidth(0.1)) ///
+       (lfit limport lexport, lcolor(cranberry)), ///
+    xtitle("Exports (USD, log)") ytitle("Imports (USD, log)") ///
+    legend(pos(6) cols(2) order(1 "Countries" 2 "Linear fit"))
+```
+
+The option `pos(6)` places the legend at 6 o'clock, that is, below the graph. The order of the plots in the command determines their number in `order()`.
+:::
+
+## Histograms and bar charts
+
+### Histograms
+
+Histograms are produced with `histogram`, abbreviated `hist`. We use the full panel of countries.
+
+``` stata
+use "https://dss.princeton.edu/training/wdipol.dta", clear
+
+hist gdppc
+hist gdppc, frequency
+hist gdppc, kdensity
+hist gdppc, kdensity normal
+```
+
+The legend of this latter graph is hardly customisable. Building the graph with `twoway` gives full control. The global `histopts` groups the options of the histogram.
+
+``` stata
+global histopts "bin(20) fcolor(ebblue%60) lcolor(white)"
+
+quietly summarize gdppc, detail
+local mu = r(mean)
+local sigma = r(sd)
+local lo = r(p1)
+local hi = r(p99)
+
+twoway (hist gdppc, $histopts) ///
+       (kdensity gdppc, lcolor(cranberry)) ///
+       (function y = normalden(x, `mu', `sigma'), range(`lo' `hi') lcolor(navy)), ///
+    xtitle("GDP per capita (USD)") ///
+    legend(pos(6) cols(2) order(2 "Kernel density" 3 "Normal distribution"))
+```
+
+The distributions of two groups are compared by overlaying two histograms, with the alternative `||` syntax of `twoway`. Here, we compare the distribution of GDP per capita across countries in 1990 and in 2012.
+
+``` stata
+twoway hist gdppc if year == 1990, bin(10) || ///
+       hist gdppc if year == 2012, bin(10) fcolor(none) lcolor(red) ///
+    legend(label(1 "1990") label(2 "2012"))
+```
+
+### Bar charts
+
+The command `graph bar` (vertical) and `graph hbar` (horizontal) plot statistics of a variable. The syntax `over()` plots a statistic for each category of a variable.
+
+``` stata
+sysuse auto, clear
+graph bar (mean) price, over(foreign)
+```
+
+We now plot the GDP per capita of the wealthier countries. The selection is based on the average over the period. A selection based on `gdppc > 18000` would instead select observations, not countries.
+
+``` stata
+use "https://dss.princeton.edu/training/wdipol.dta", clear
+
+bysort country: egen gdppc_avg = mean(gdppc)
+
+graph hbar (mean) gdppc if gdppc_avg > 18000, ///
+    over(country, sort(1) descending label(labsize(*0.7))) ///
+    bar(1, color(ebblue))
+
+graph hbar (mean) gdppc (median) gdppc if gdppc_avg > 18000, ///
+    over(country, sort(1) descending label(labsize(*0.8))) ///
+    legend(label(1 "Mean") label(2 "Median")) ///
+    bar(1, color(navy)) bar(2, color(cranberry))
+```
+
+## Box plots
+
+``` stata
+generate lgdppc = log(gdppc)
+generate ltrade = log(trade)
+
+graph box lgdppc ltrade
+```
+
+::: {.callout-tip}
+## Exercise
+
+Make a box plot with the variables of your choice, for instance the logarithm of imports and exports.
+
+1.  Read carefully the help of `graph box`
+2.  Change the colour of the two boxes
+3.  Change the width of the graph with the options `xsize()` and `ysize()`
+4.  Place the legend below, on two columns
+5.  Add a title in bold, using the syntax `{bf: text}`
+:::
+
+## Line charts
+
+Line charts are appropriate for time series and panel data. The years are on the x-axis and the values on the y-axis. We use the built-in life expectancy dataset.
+
+``` stata
+sysuse uslifeexp, clear
+
+line le year                        // The variable on the y-axis is placed first
+line le_male le_female year         // Several series: the x variable is always last
+```
+
+An alternative uses `scatter` with the option `connect()`.
+
+``` stata
+scatter le_male le_female year, connect(l l) msymbol(none none)
+```
+
+We improve the graph in three ways: the legend is placed inside the plot region, the lines are restyled and an annotation is added. We first change the legend and the titles.
+
+``` stata
+line le_male le_female year, ///
+    legend(ring(0) pos(5) region(lstyle(none))) ///
+    title("{bf:Life expectancy} in the 20th century") ///
+    xtitle("Year") ytitle("Years") ///
+    note("Source: US Census Bureau") ///
+    ylabel(, nogrid) xlabel(, nogrid)
+```
+
+The option `ring(0)` places the legend inside the plot region and `pos(5)` at 5 o'clock. The grid is removed by `nogrid` and the title is in bold thanks to `{bf: }`.
+
+The lines are restyled with `lcolor()` and `lpattern()`:
+
+``` stata
+line le_male le_female year, ///
+    lcolor(green cranberry) lpattern(longdash longdash_dot) ///
+    legend(ring(0) pos(5) region(lstyle(none))) ///
+    title("{bf:Life expectancy} in the 20th century") ///
+    xtitle("Year") ytitle("Years") ///
+    note("Source: US Census Bureau") ///
+    ylabel(, nogrid) xlabel(, nogrid)
+```
+
+The drop of life expectancy in 1918 is due to the Spanish flu. We add an arrow with `pcarrowi y1 x1 y2 x2 (clockposition) "label"`. It goes from the point $(x_1, y_1)$ to the point $(x_2, y_2)$.
+
+``` stata
+twoway (line le_male le_female year, ///
+            lcolor(green cranberry) lpattern(longdash longdash_dot)) ///
+       (pcarrowi 45 1930 40 1918 (2) "Spanish flu", ///
+            color(black) mlabcolor(black)), ///
+    legend(order(1 2) ring(0) pos(5) region(lstyle(none))) ///
+    title("{bf:Life expectancy} in the 20th century") ///
+    xtitle("Year") ytitle("Years") ///
+    note("Source: US Census Bureau") ///
+    ylabel(, nogrid) xlabel(, nogrid)
+```
+
+The option `order(1 2)` keeps only the two lines in the legend and excludes the arrow.
+
+## Regression coefficients
+
+Regression coefficients are plotted with their confidence intervals using the package `coefplot`. Part of the material is adapted from [this blog post](https://medium.com/the-stata-gallery/making-regression-coefficient-plots-in-stata-7b100feac0cb).
+
+``` stata
+ssc install coefplot, replace
+```
+
+We use the `auto` dataset. The variables are rescaled between 0 and 1, so that their coefficients are comparable. A loop avoids repeating the same code.
+
+``` stata
+sysuse auto, clear
+
+foreach v in mpg weight length {
+    quietly summarize `v'
+    generate `v'_01 = (`v' - r(min)) / (r(max) - r(min))
+}
+```
+
+A standardised variable (mean 0 and standard deviation 1) is obtained with `egen mpg_std = std(mpg)`.
+
+We run a regression and plot its coefficients. `coefplot` uses the last estimation by default.
+
+``` stata
+regress price mpg_01 weight_01 length_01 i.foreign, vce(robust)
+coefplot
+```
+
+::: {.callout-tip}
+Estimates stored with `eststo` can be used directly: `coefplot m1`. They can be restored with `estimates restore m1`, which is also useful to access the `e()` results.
+:::
+
+The graph is improved step by step. The names of the coefficients are printed by `regress, coeflegend`.
+
+``` stata
+regress, coeflegend      // Print the names to use in the options of coefplot
+
+* Vertical line at zero and removal of the constant
+global coefplotopts "drop(_cons) xline(0, lcolor(red) lwidth(medium))"
+
+coefplot, $coefplotopts ///
+    coeflabels(mpg_01 = "MPG" weight_01 = "Weight" length_01 = "Length")
+
+* A more complete model
+regress price mpg_01 weight_01 length_01 i.foreign i.foreign#c.mpg_01, vce(robust)
+
+coefplot, $coefplotopts ///
+    coeflabels(mpg_01 = "MPG" weight_01 = "Weight" length_01 = "Length" ///
+               1.foreign = "Foreign" 1.foreign#c.mpg_01 = "MPG X Foreign")
+
+* Final version
+coefplot, $coefplotopts ///
+    xtitle("{bf:Effect on vehicle price (USD)}") ///
+    graphregion(margin(medsmall)) ///
+    xlabel(, nogrid) ///
+    ylabel(, glpattern(dash) glcolor(gs14)) ///
+    coeflabels(mpg_01 = "MPG" length_01 = "Length" weight_01 = "Weight" ///
+               1.foreign = "Foreign" 1.foreign#c.mpg_01 = `""MPG X" "Foreign""') ///
+    headings(mpg_01 = "{bf:Vehicle specs}" ///
+             1.foreign = "{bf:Production info}" ///
+             1.foreign#c.mpg_01 = "{bf:Interactions}", gap(0))
+```
+
+Several models are compared in the same graph. Each model is stored and passed in a parenthesis, with its own label.
+
+``` stata
+eststo clear
+eststo m1: regress price mpg_01 weight_01 length_01, vce(robust)
+eststo m2: regress price mpg_01 weight_01 length_01 i.foreign, vce(robust)
+
+coefplot (m1, label("Baseline")) (m2, label("With origin")), ///
+    keep(mpg_01 weight_01 length_01) xline(0) legend(pos(6) cols(2))
+```
+
+The confidence level is chosen with `levels()`, and several levels are plotted at once with `levels(95 90)`.
+
+## Exercise
+
+Does trade orientation correlate with life expectancy? We use the dataset `wdipol` and a World Bank dataset on male life expectancy.
+
+::: {.callout-tip}
+## Exercise
+
+**Life expectancy data**
+
+1.  Download, save and open the World Bank [dataset](https://api.worldbank.org/v2/en/indicator/SP.DYN.LE00.MA.IN?downloadformat=csv). The archive contains a `.csv` file with header lines. Open it with `import delimited` and inspect the first rows with `browse`
+2.  Keep the country names and the variables whose name starts with `v`, except the last one, which is empty
+3.  Using a loop, rename the `v` variables into `le_maleYYYY`
+4.  Reshape to long format with a new column `year`
+5.  Save as a temporary file
+
+Hints for steps 1 to 4. The years are stored in the labels of the variables `v`. The following pieces of code can be adapted.
+
+``` stata
+* The row containing the column headers (here 5) must be checked in the file
+import delimited "$path/raw_data/API_SP.DYN.LE00.MA.IN.csv", varnames(5) clear
+rename countryname country
+
+foreach v of varlist v* {
+    local yr : variable label `v'
+    if "`yr'" == "" drop `v'
+    else rename `v' le_male`yr'
+}
+
+reshape long le_male, i(country) j(year)
+```
+
+By now, the dataset should look as follows:
+
+```
+. list in 1/10
+
+     +------------------------------+
+     |     country   year   le_male |
+     |------------------------------|
+  1. | Afghanistan   1960    32.136 |
+  2. | Afghanistan   1961    32.626 |
+  3. | Afghanistan   1962    33.098 |
+  4. | Afghanistan   1963    33.543 |
+  5. | Afghanistan   1964    34.004 |
+     |------------------------------|
+  6. | Afghanistan   1965    34.438 |
+  7. | Afghanistan   1966    34.877 |
+  8. | Afghanistan   1967    35.324 |
+  9. | Afghanistan   1968    35.825 |
+ 10. | Afghanistan   1969    36.287 |
+     +------------------------------+
+```
+
+**Trade data**
+
+1.  Open the trade data and keep `country`, `year`, `export` and `import`
+2.  Compute the export share `xshare`, defined as `export / (export + import)`
+3.  Drop the observations with a missing export share
+4.  Merge with the life expectancy data (`1:1`, with `country` and `year` as keys)
+5.  Keep the matched observations only
+6.  Count the number of observations by country (hint: `bysort country: generate count = _N`)
+7.  Using a local, keep only the countries observed in all years of the panel
+
+By now, the dataset should look as follows:
+
+```
+     +-------------------------------------------------------------------------------------+
+     | year     country      export      import    xshare   le_male        _merge   count |
+     |-------------------------------------------------------------------------------------|
+  1. | 1980   Australia   32720.597    26890.83   .548898     70.88   Matched (3)      33 |
+  2. | 1981   Australia   31132.097   29423.028  .5141117      71.2   Matched (3)      33 |
+  3. | 1982   Australia    31867.06   32823.251  .4926095      71.5   Matched (3)      33 |
+  4. | 1983   Australia   32032.664   30058.226  .5158996      71.8   Matched (3)      33 |
+  5. | 1984   Australia   34477.203   31856.781  .5197517      72.1   Matched (3)      33 |
+     +-------------------------------------------------------------------------------------+
+```
+
+The export share is not the usual measure of trade openness, which is the sum of exports and imports over GDP. It is used here for simplicity.
+
+**Continents**
+
+We compute summary statistics by continent. Define the following globals. Text is enclosed in compound quotation marks when it contains commas.
+
+``` stata
+global europe  "Austria Belgium Bulgaria Denmark Finland France Greece Italy Luxembourg Netherlands Norway Portugal Sweden"
+global oceania "Australia"
+global asia    "Bangladesh India Indonesia Jordan Malaysia Pakistan Philippines Singapore Thailand"
+global africa  `" "Congo, Dem. Rep." "Congo, Rep." "Kenya" "Lesotho" "Mauritania" "Mauritius" "Morocco" "Mozambique" "Rwanda" "South Africa" "Tunisia" "'
+global latam   `" "Bolivia" "Brazil" "Chile" "Colombia" "Costa Rica" "Dominican Republic" "Ecuador" "El Salvador" "Guatemala" "Honduras" "Mexico" "Nicaragua" "Panama" "Peru" "Uruguay" "'
+```
+
+1.  Using loops over the globals, fill a variable `continent` with the name of the continent
+2.  Save as a temporary file
+
+It should look as follows:
+
+```
+. list country continent in 1/10, compress
+
+     +----------------------+
+     |   country  continent |
+     |----------------------|
+  1. | Australia    Oceania |
+  2. | Australia    Oceania |
+  ...
+```
+
+**Graphs**
+
+1.  Make a scatter plot of life expectancy and export share in 2012
+2.  Make a scatter plot with the two years 1980 and 2012 on the same graph
+3.  Using `lfitci`, add a confidence interval to the first plot. In the legend, keep only the linear fit and the points. Add the note "95% confidence interval" below the graph
+4.  Export the graph as `.pdf`
+
+We now compute and plot the mean of life expectancy and of the export share by continent and year.
+
+0.  Use `preserve` and `restore` to keep the main dataset in memory during the exercise
+1.  Collapse life expectancy and export share by continent and year, with the mean and the median
+2.  With a two-axis plot, show the evolution of the export share and of life expectancy for Asia
+3.  Make a plot with one panel per continent showing the same relationship (option `by(continent)`)
+
+**Regressions**
+
+1.  Regress life expectancy on the export share with the option `vce(robust)`
+2.  Add a dummy for each continent. What must be done first?
+3.  Add year dummies
+4.  Plot the coefficients of the last regression for the export share and the continent dummies only
+5.  Plot the coefficients of the export share across the three regressions
+:::
+
+::: {.callout-note collapse="true"}
+## Hints for the graphs and regressions
+
+``` stata
+* Confidence interval: lfitci draws the interval (plot 1), the line (plot 2)
+twoway (lfitci le_male xshare) (scatter le_male xshare), ///
+    legend(order(3 "Countries" 2 "Linear fit")) note("95% confidence interval")
+
+* Two axes: each series is attached to one axis
+twoway (line xshare year, yaxis(1)) (line le_male year, yaxis(2)), ///
+    ytitle("Export share", axis(1)) ytitle("Life expectancy (years)", axis(2)) ///
+    legend(order(1 "Export share" 2 "Life expectancy"))
+
+* Continent dummies: the string variable must be encoded first
+encode continent, generate(continent_id)
+regress le_male xshare i.continent_id, vce(robust)
+
+* Coefficients across models
+eststo clear
+eststo m1: regress le_male xshare, vce(robust)
+eststo m2: regress le_male xshare i.continent_id, vce(robust)
+eststo m3: regress le_male xshare i.continent_id i.year, vce(robust)
+coefplot m1 m2 m3, keep(xshare) xline(0)
+```
+:::

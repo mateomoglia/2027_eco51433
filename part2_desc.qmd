@@ -1,0 +1,339 @@
+---
+title: "Summary statistics"
+---
+
+This part covers the computation of summary statistics, in particular by group, and their export to LaTeX. It also introduces regression tables.
+
+## Simple statistics
+
+We use the standard `auto.dta` dataset.
+
+``` stata
+sysuse auto, clear
+
+describe
+summarize
+list in 1/10
+```
+
+Summary statistics for one variable, with and without the detailed distribution:
+
+``` stata
+summarize price
+summarize price, detail
+```
+
+The command `tabstat` is more compact and handles several variables. The option `by()` splits the statistics by a categorical variable, and `statistics()` selects the statistics.
+
+``` stata
+tabstat price mpg weight length, statistics(mean sd min p50 max n) columns(statistics)
+tabstat price mpg weight, by(foreign) statistics(mean sd p50 n) columns(statistics)
+```
+
+Frequency tables are obtained with `tabulate`, for one or two variables. Missing values are excluded unless the option `missing` is specified.
+
+``` stata
+tabulate foreign
+tabulate foreign rep78, row column
+tabulate foreign rep78, missing
+```
+
+The mean of a variable by category is printed with the option `summarize()`.
+
+``` stata
+tabulate foreign, summarize(mpg)
+```
+
+A test of equality of means between two groups is performed with `ttest`. The option `unequal` allows for different variances.
+
+``` stata
+ttest price, by(foreign) unequal
+```
+
+The pairwise correlations are obtained with `correlate` (listwise deletion) or `pwcorr` (pairwise deletion, with significance levels).
+
+``` stata
+correlate price mpg weight
+pwcorr price mpg weight, sig
+```
+
+## LaTeX export
+
+The package `estout` provides two commands. `estpost` stores the output of descriptive commands (`summarize`, `tabstat`, `tabulate`, `ttest`) as estimation results. `esttab` writes these results in a table, in several formats including LaTeX.
+
+::: {.callout-tip}
+## Install packages
+
+The package `estout` is installed once per computer:
+
+``` stata
+ssc install estout, replace
+```
+:::
+
+The key commands are the following.
+
+-   `eststo clear` removes the stored estimates, to start from a clean state
+-   `estpost` stores the results of a descriptive command
+-   `esttab` prints or exports the table
+
+### Overall summary statistics
+
+``` stata
+eststo clear
+estpost summarize price mpg weight length, detail listwise
+
+esttab using "$path/output/tables/summary_overall.tex", replace ///
+    title("Summary statistics") ///
+    cells("count(fmt(%9.0f)) mean(fmt(%9.2f)) sd(fmt(%9.2f)) min(fmt(%9.0f)) p50(fmt(%9.2f)) max(fmt(%9.0f))") ///
+    label booktabs noobs nomtitle
+```
+
+The option `detail` is required for the median (`p50`) to be stored. The file `summary_overall.tex` can be included in a LaTeX document with `\input{}`.
+
+::: {.callout-tip}
+## Line breaks
+
+The symbol `///` at the end of a line indicates that the command continues on the next line. It is required in do-files, whatever the version of Stata. The automatic wrapping displayed in the editor is a visual feature and does not split the command. Since a command spans several lines, the whole block must be selected and executed together.
+:::
+
+### Summary statistics by group
+
+The table below reports the mean and the standard deviation of `price`, `mpg` and `weight` for each value of `foreign`.
+
+``` stata
+eststo clear
+estpost tabstat price mpg weight, by(foreign) statistics(mean sd p50 n) nototal columns(statistics)
+
+esttab . using "$path/output/tables/summary_by_foreign.tex", replace ///
+    cells(mean sd) label nogaps booktabs noobs nomtitle
+```
+
+Other text formats are available: `.txt`, `.csv`, `.smcl` (the Stata format), or `.rtf`. Excel files are produced with the command `putexcel`, which is not covered here.
+
+An alternative builds one column per group. It gives full control over the layout.
+
+``` stata
+eststo clear
+
+estpost summarize price mpg weight if foreign == 0
+eststo domestic
+estpost summarize price mpg weight if foreign == 1
+eststo foreign_cars
+
+esttab domestic foreign_cars using "$path/output/tables/summary_groups.tex", replace ///
+    cells("mean(fmt(%9.2f)) sd(fmt(%9.2f))") ///
+    mtitles("Domestic" "Foreign") label booktabs noobs
+```
+
+### Balance table
+
+Economic papers usually report the means of two groups and the test of their difference. The command `estpost ttest` stores the means of each group (`mu_1`, `mu_2`) and the difference (`b`).
+
+``` stata
+eststo clear
+estpost ttest price mpg weight length, by(foreign)
+
+esttab using "$path/output/tables/balance.tex", replace ///
+    cells("mu_1(fmt(%9.2f)) mu_2(fmt(%9.2f)) b(star fmt(%9.2f))") ///
+    collabels("Domestic" "Foreign" "Difference") ///
+    star(* 0.10 ** 0.05 *** 0.01) label booktabs noobs nomtitle nonumber
+```
+
+The difference is computed as the mean of the first group minus the mean of the second group. The sign should be checked against the coding of the variable.
+
+### Frequency table
+
+``` stata
+eststo clear
+estpost tabulate foreign
+
+esttab using "$path/output/tables/freq_foreign.tex", replace ///
+    cells("b(label(Frequency)) pct(fmt(%9.2f))") ///
+    label booktabs noobs nomtitle
+```
+
+## Regression tables
+
+A regression table requires a regression. The syntax is `regress y x, options`. Many other estimators exist (`areg`, `ivregress`, `reghdfe`, etc.). They depend on the model and are beyond the scope of this part.
+
+We study the correlation between the characteristics of the cars and their price. The first model is:
+
+$$
+\texttt{price}_i = \beta_0 + \beta_1 \texttt{foreign}_i + \beta_2 \texttt{mpg}_i + \sum_{k=2}^{5} \gamma_k \mathbf{1}\{\texttt{rep78}_i = k\} + \varepsilon_i
+$$
+
+The associated code is:
+
+``` stata
+sysuse auto, clear
+
+regress price i.foreign mpg i.rep78, vce(robust)
+```
+
+::: {.callout-tip}
+The prefix `i.` declares a variable as categorical. It is required for `foreign` and `rep78` since they are coded as numbers. The option `vce(robust)` reports heteroskedasticity-robust standard errors.
+:::
+
+The second model adds an interaction. It assesses whether the association between fuel efficiency and price differs between domestic and foreign cars.
+
+$$
+\texttt{price}_i = \beta_0 + \beta_1 \texttt{foreign}_i + \beta_2 \texttt{mpg}_i + \beta_3 \texttt{foreign}_i \times \texttt{mpg}_i + \sum_{k=2}^{5} \gamma_k \mathbf{1}\{\texttt{rep78}_i = k\} + \varepsilon_i
+$$
+
+``` stata
+regress price i.foreign##c.mpg i.rep78, vce(robust)
+```
+
+The operator `##` includes the main effects and the interaction. The operator `#` includes the interaction only. The prefix `c.` declares `mpg` as continuous. Without it, Stata would interact `foreign` with each value of `mpg`.
+
+### Store and export the results
+
+The estimates are stored with `eststo`, which can be used in two equivalent ways.
+
+``` stata
+eststo clear
+
+eststo no_inter: regress price i.foreign mpg i.rep78, vce(robust)
+
+regress price i.foreign##c.mpg i.rep78, vce(robust)
+eststo inter
+```
+
+The stored estimates remain available until `eststo clear` or until Stata is closed. They are printed with `esttab`. The following commands build the final table progressively. Each line adds one option to the previous one.
+
+``` stata
+esttab no_inter inter                                   // Default display
+esttab no_inter inter, booktabs                         // LaTeX format
+esttab no_inter inter, booktabs se                      // Standard errors instead of t-statistics
+esttab no_inter inter, booktabs b(%9.2f) se(%9.2f)      // Number format
+esttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///
+    star(* 0.10 ** 0.05 *** 0.01)                       // Significance levels
+esttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    indicate("Repair record dummies = *.rep78")         // One line for the dummies
+esttab no_inter inter, booktabs b(%9.2f) se(%9.2f) ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    indicate("Repair record dummies = *.rep78") ///
+    label nobaselevels                                  // Variable labels, no base level
+```
+
+The final version adds the statistics, the titles and the notes, and writes the file:
+
+``` stata
+esttab no_inter inter using "$path/output/tables/reg_price.tex", replace ///
+    booktabs b(%9.2f) se(%9.2f) ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    indicate("Repair record dummies = *.rep78") ///
+    label nobaselevels ///
+    mtitles("Baseline" "Interaction") nonumbers ///
+    stats(N r2, fmt(%9.0fc %9.3f) labels("Observations" "R-squared")) ///
+    title("Determinants of car prices") ///
+    nonotes addnotes("Robust standard errors in parentheses." ///
+                     "* p<0.10, ** p<0.05, *** p<0.01")
+```
+
+::: {.callout-tip}
+The significance levels of the convention in economics are 10%, 5% and 1%. The default levels of `esttab` are 5%, 1% and 0.1% and should be changed with `star()`.
+:::
+
+## Advanced users
+
+The package `tabout` produces complex cross-tabulations directly in LaTeX or Excel. Its [documentation](https://tabout.net.au/downloads/tabout_user_guide.pdf) is dense and the syntax is demanding, but it is very flexible.
+
+## Exercise
+
+To conclude Parts 1 and 2, we combine two sources on the population of the US states. The first one is the built-in `census.dta`. The second one is an Excel file, `nst-est2019-01.xlsx`, available in the raw data folder.
+
+### Step 1: 1980 data
+
+1.  Set up the do-file. Define two globals: one containing the path and one containing the string `1980 2010`, called `years`
+2.  Load `census.dta` with `sysuse` and tabulate `region`. The US census defines four regions: Northeast, North Central (Midwest), South and West
+3.  The labels of `region` are abbreviated. Define a new label with the full names and update the label of `region`
+4.  Using `decode region, gen(region_name)`, create a string variable with the names of the regions
+5.  Keep the variables `state`, `region`, `region_name` and `pop`
+6.  Rename `pop` to `pop1980`
+7.  Save the dataset as `$path/temp/census1980.dta`
+
+### Step 2: 2010 data
+
+1.  Open `nst-est2019-01.xlsx` with `import excel`. Only the range `A10:B60` is kept, with the option `cellrange()`
+2.  Rename the two columns `state` and `pop2010`
+3.  The names of the states start with a dot. Remove it with `subinstr()`
+4.  Save the dataset as `$path/temp/census2010.dta`
+
+### Step 3: merge
+
+1.  Clear the memory, open `census2010.dta` and merge it with `census1980.dta`, with `1:1` and `state` as key. Tabulate `_merge`. What happened?
+2.  Some states are named differently in the two datasets. Write a loop over the global `years`. It opens each dataset, replaces the abbreviations `N.` by `North`, `S.` by `South` and `W.` by `West`, and saves the dataset
+3.  Repeat the merge. Inspect the unmatched observations and drop them if they cannot be reconciled
+
+### Step 4: statistics
+
+1.  Compute the population change between 1980 and 2010, in percent
+2.  Make a table summarising the mean, the standard deviation and the median of this change by region
+3.  Reshape the dataset to long format, with two rows per state, one for 1980 and one for 2010
+
+### Bonus
+
+1.  Collapse the change by region, computing the mean. Use `preserve` and `restore`
+2.  Using `graph bar var, over(group)`, make a bar chart of the change by region
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+* Step 1
+global path "C:/Users/username/courses/2027_eco51423ep"
+global years "1980 2010"
+
+sysuse census, clear
+tabulate region
+
+label define region_full 1 "Northeast" 2 "North Central" 3 "South" 4 "West"
+label values region region_full
+decode region, generate(region_name)
+
+keep state region region_name pop
+rename pop pop1980
+save "$path/temp/census1980.dta", replace
+
+* Step 2
+import excel "$path/raw_data/nst-est2019-01.xlsx", cellrange(A10:B60) clear
+rename (A B) (state pop2010)
+replace state = subinstr(state, ".", "", 1)
+save "$path/temp/census2010.dta", replace
+
+* Step 3
+foreach y of global years {
+    use "$path/temp/census`y'.dta", clear
+    replace state = subinstr(state, "N.", "North", 1)
+    replace state = subinstr(state, "S.", "South", 1)
+    replace state = subinstr(state, "W.", "West", 1)
+    save "$path/temp/census`y'.dta", replace
+}
+
+use "$path/temp/census2010.dta", clear
+isid state
+merge 1:1 state using "$path/temp/census1980.dta"
+tabulate _merge
+list state if _merge != 3
+keep if _merge == 3
+drop _merge
+
+* Step 4
+generate change = (pop2010 - pop1980) / pop1980 * 100
+label variable change "Population change 1980-2010 (%)"
+tabstat change, by(region_name) statistics(mean sd p50)
+
+reshape long pop, i(state) j(year)
+
+* Bonus
+preserve
+collapse (mean) change, by(region_name)
+graph bar change, over(region_name)
+restore
+```
+
+The order of the labels in `region_full` must follow the numeric coding of `region`. It should be checked with `tabulate region, nolabel`.
+:::

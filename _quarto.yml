@@ -1,0 +1,45 @@
+project:
+  type: website
+  output-dir: _site
+
+lang: en-GB
+
+editor: source
+
+execute:
+  eval: false # Code blocks are displayed only and never executed
+  freeze: auto
+
+website:
+  title: "Introduction to Stata"
+  sidebar:
+    style: "docked"
+    search: false
+    contents:
+      - href: index.qmd
+        text: Home
+      - href: part0_stata.qmd
+        text: First hand on Stata
+      - href: part1_data.qmd
+        text: Data manipulation
+      - href: part2_desc.qmd
+        text: Summary statistics
+      - href: part3_viz.qmd
+        text: Data visualisation
+      - href: part4_reg.qmd
+        text: Regression workflow
+      - href: part5_debug.qmd
+        text: Debugging clinic
+  page-footer:
+    right: "Built with [Quarto](https://quarto.org/)"
+    left: "&copy; Copyright 2026, Mateo Moglia"
+
+format:
+  html:
+    theme: [united, theme_mm.scss]
+    toc: true
+    toc-title: ""
+    toc-location: right
+    code-copy: true
+    highlight-style: github
+    smooth-scroll: true

@@ -1,0 +1,59 @@
+---
+title: "Introduction to Stata"
+---
+
+This website contains the tutorials of the *Introduction to Stata* course of the Master's programme at École Polytechnique. The course has three objectives: (i) master the basics of Stata, (ii) implement the standard statistical and empirical tools, and (iii) produce publication-quality output.
+
+::: {.callout-note}
+## Practical information
+
+**TA**: [Mateo Moglia](https://mateomoglia.github.io)
+
+**Schedule**: two sessions of four hours. Room changes are announced on Moodle.
+
+**Software**: Stata, version 17 or later. The software is installed on the computers of the lab. Some commands used in the course require Stata 16 or later.
+
+**Data**: the datasets are available on Moodle.
+
+**Evaluation**: there is no evaluation.
+:::
+
+::: {.callout-caution collapse="true"}
+## Log
+
+-   v0.0 - 15/09/25 - Creation
+-   v1.0 - 28/09/26 - Update of Parts 0 to 3, addition of Parts 4 and 5, code blocks displayed only
+:::
+
+## Class outline
+
+| Session | Part | Content | Duration |
+|:-------:|:-----|:--------|:--------:|
+| 1 | Part 0: First hand on Stata | Interface, do-files, logs, syntax, packages | 1h |
+| 1 | Part 1: Data manipulation | Import, cleaning, macros, loops, strings, reshape, merge | 3h |
+| 2 | Part 2: Summary statistics | Descriptive statistics, LaTeX export, regression tables | 1h15 |
+| 2 | Part 3: Data visualisation | Scatter plots, histograms, bar charts, box plots, line charts, coefficient plots | 1h30 |
+| 2 | Part 4: Regression workflow | Panel data, fixed effects, clustered standard errors | 45 min |
+| 2 | Part 5: Debugging clinic | Error messages, data checks, master do-file | 30 min |
+
+The parts are cumulative. Part 2 relies on the datasets and macros built in Part 1.
+
+During the sessions, the material of each part is presented in full. Exercises are provided and must be completed during the session. Solutions are available in collapsed boxes and should be opened only after an attempt.
+
+## Conventions used on this website
+
+-   Code blocks are displayed but not executed. Each block must be copied into a do-file.
+-   Comments in the code start with `//` or `*`.
+-   The global macro `$path` denotes the working directory. It is defined in Part 0.
+-   Some commands come from user-written packages. They are installed once per computer (see Part 0).
+-   Datasets are called by name. Their location is `$path/raw_data/`.
+
+::: {.callout-tip}
+## Exercise
+
+Exercises appear in boxes of this type.
+:::
+
+## About this site and its inspirations
+
+This site was created for teaching purposes. It is perfectible and any constructive comment is welcome ([write me an email](mailto:mateo.moglia@gmail.com)). The material draws on the teaching resources listed [here](https://www.stata.com/links/resources-for-learning-stata).

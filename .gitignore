@@ -1,0 +1,8 @@
+_site/
+.quarto/
+raw_data/
+temp/
+output/
+.Rhistory
+.RData
+/.quarto/

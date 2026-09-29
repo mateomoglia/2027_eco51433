@@ -1,0 +1,260 @@
+---
+title: "First hand on Stata"
+---
+
+This part introduces the software, its logic and the working conventions used throughout the course. Stata is proprietary software, first released in 1985. The version used as a reference here is Stata 19.
+
+## General philosophy
+
+Stata works on one active dataset at a time. Every command acts on the dataset held in memory. Since Stata 16, several datasets can be held simultaneously in *frames*. The one-dataset logic nevertheless remains the default.
+
+Code is written in a **do-file**, a text file with the extension `.do`. A do-file can be executed entirely or line by line. Each line is a separate command.
+
+Stata has three main strengths. Its syntax is compact and stable across versions. It is efficient for standard econometric tasks. Tables and figures are easily exported to `.tex`, `.pdf` or image formats. Its main limitations are its price and its limited flexibility for non-tabular data.
+
+## The interface
+
+| Window | Content |
+|:-------|:--------|
+| Command | Line where a single command is typed and executed |
+| Results | Output of the commands |
+| Review | History of the commands executed |
+| Variables | Variables of the dataset, with their labels |
+| Properties | Characteristics of the selected variable and of the dataset |
+| Do-file editor | Text editor for scripts, opened with `doedit` |
+| Data browser and editor | Spreadsheet view of the data, opened with `browse` or `edit` |
+
+::: {.callout-warning}
+`edit` allows manual changes to the data. Manual changes are not recorded in any script and cannot be reproduced. `browse` is the appropriate command to inspect a dataset.
+:::
+
+## Best practice
+
+Some practices should be adopted before writing the first line of code. They matter for three reasons:
+
+-   Reproducibility is a requirement of empirical research. Most leading economics journals require a replication package.
+-   A structured project reduces errors and facilitates collaboration.
+-   Code is read more often than it is written, including by its author, months later.
+
+### Folder organisation
+
+Each project is stored in a working directory (`wd`), which contains a fixed set of subfolders. The same structure is used in every project. This saves time when navigating between projects or changing computers.
+
+``` plaintext
+~/courses/2026_eco51423ep/
+├── code/          <- do-files
+├── raw_data/      <- original data, never modified
+├── temp/          <- intermediate datasets
+├── output/
+│   ├── figures/
+│   └── tables/
+└── logs/          <- log files
+```
+
+The folder `raw_data` is treated as read-only. Every transformation of the data is performed by a do-file and saved in `temp`.
+
+### Naming conventions
+
+File names are short, self-explanatory and written in lower case. Spaces and special characters are avoided. An underscore is used instead. A numeric prefix indicates the order of execution, for instance `1_clean_data.do`, `2_merge_datasets.do` and `3_analysis.do`.
+
+Variables follow the same logic. A dataset of wages for individuals aged 25 to 30 can be called `wage_25_30`. The name `w2530` is too short and `wage_individuals_aged_25_30` is too long.
+
+### Writing code
+
+-   Code is commented. The comments explain the purpose of a block, not the syntax of each line.
+-   Comments start with `*` (at the beginning of a line) or `//` (after a space, at the end of a line). A block of comments is placed between `/*` and `*/`.
+-   A long line is split with `///`.
+-   Scripts are short and each script has one purpose.
+-   Paths are written with forward slashes (`/`) on every operating system.
+
+## The do-file
+
+A do-file starts with a header and a set-up block. The following template is used throughout the course.
+
+``` stata
+/*==========================================================================
+    Project : Introduction to Stata
+    File    : code_tutorial.do
+    Author  : First Last
+    Date    : 28 September 2026
+    Purpose : Load the auto dataset and produce basic descriptive output
+==========================================================================*/
+
+* ===== 1. Set-up =====
+
+clear all                 // Empty the memory
+set more off              // Do not pause the output
+set varabbrev off         // Require complete variable names
+capture log close         // Close a possibly open log without error
+
+global path "C:/Users/username/courses/2026_eco51423ep"   // To adapt
+cd "$path"
+
+log using "$path/logs/part0.smcl", replace
+
+* ===== 2. Data =====
+
+sysuse auto, clear
+
+* ===== 3. Analysis =====
+
+describe
+summarize price mpg weight
+
+log close
+```
+
+The global macro `$path` is defined once, at the top of the do-file. All the other paths are built from it. To run the code on another computer, only this line is modified.
+
+### Run lines
+
+A do-file is executed entirely with `Ctrl + D` (`Shift + Cmd + D` on macOS). Selecting some lines before pressing the shortcut executes the selection only.
+
+By default, Stata prints all the output. The prefix `quietly` suppresses the output of a command. A whole block can be silenced with braces.
+
+``` stata
+quietly summarize price
+
+quietly {
+    regress price mpg
+    predict price_hat
+}
+```
+
+The prefix `noisily` reactivates the output within a `quietly` block.
+
+### Logs
+
+A log file records the commands and the output displayed in the Results window. It is opened with `log using` and closed with `log close`.
+
+``` stata
+capture log close
+log using "$path/logs/part0.smcl", replace   // Open a log in the Stata format
+log using "$path/logs/part0.log", replace text   // Or a plain text log
+
+* ... commands ...
+
+log close
+```
+
+`capture log close` at the top of the do-file avoids an error if a log is already open, for instance after an interrupted execution.
+
+### Getting help
+
+``` stata
+help summarize        // Documentation of a command
+search panel data     // Search by keyword in the documentation and the packages
+```
+
+The complete documentation is available in PDF from the menu `Help`. The command `help` is the first reference, before any online search.
+
+## Syntax
+
+The syntax of most Stata commands follows the same structure:
+
+``` stata
+[by varlist:] command [varlist] [if] [in] [weight] [using filename] [, options]
+```
+
+A command starts with its name, for instance `summarize`. It is followed by the variables (or the object, the path, etc.), by conditions and by options placed after a comma.
+
+``` stata
+sysuse auto, clear
+
+summarize price mpg                      // Two variables
+summarize price mpg if foreign == 1      // A condition
+summarize price in 1/20                  // The first 20 observations
+summarize price, detail                  // An option
+bysort foreign: summarize price          // A prefix: one output per group
+```
+
+### Abbreviations and wildcards
+
+Most commands have shortcuts. `regress` can be written `reg` and `summarize` can be written `su` or `sum`. Options can also be abbreviated. Abbreviations of command names are convenient in the Command window but reduce readability in a do-file.
+
+Abbreviations of variable names are a source of errors. The option `set varabbrev off`, included in the header above, disables them.
+
+Wildcards are available in lists of variables:
+
+-   `*` stands for any string of characters
+-   `?` stands for exactly one character
+-   `-` denotes a range of variables, in the order of the dataset
+
+Consider the variables `popmun2007`, `popmun2008`, up to `popmun2020`. To summarise these 14 variables:
+
+``` stata
+summarize popmun2007 popmun2008 popmun2009 popmun2010 popmun2011 popmun2012 popmun2013 popmun2014 popmun2015 popmun2016 popmun2017 popmun2018 popmun2019 popmun2020
+summarize popmun2007-popmun2020     // Only if the variables are in that order
+summarize popmun*                   // Requires that no other variable starts with popmun
+```
+
+### Operators and missing values
+
+-   Comparison: `==` (equal to), `!=` (different from), `>`, `>=`, `<`, `<=`
+-   Logical operators: `&` (and), `|` (or), `!` (not)
+-   Membership and range: `inlist(x, 1, 2, 3)` and `inrange(x, 10, 20)`
+-   Missing values: `missing(x)` is true if `x` is missing
+
+::: {.callout-warning}
+## Missing values
+
+A missing numeric value is denoted `.` and is treated by Stata as larger than any number. The condition `age > 25` is therefore true for an observation with a missing age. Conditions on variables containing missing values should include `& !missing(age)`. This point causes frequent silent errors and is revisited in Part 1.
+:::
+
+## First commands
+
+The following commands describe a dataset. They are run on the built-in `auto` dataset.
+
+``` stata
+sysuse auto, clear
+
+describe                  // Variables, types, labels
+codebook price foreign    // Detailed description of selected variables
+list make price in 1/5    // Print observations
+summarize price mpg       // Summary statistics
+tabulate foreign          // Frequency table
+count if foreign == 1     // Number of observations satisfying a condition
+```
+
+::: {.callout-tip}
+## Exercise
+
+1.  Create the folder structure presented above and open a new do-file with the header template.
+2.  Define `$path` and open a log file.
+3.  Load the `auto` dataset. How many observations and variables does it contain?
+4.  Compute the mean, the median and the 90th percentile of `price`.
+5.  What is the share of foreign cars?
+6.  How many foreign cars are priced above 10,000 USD?
+7.  Close the log and open the file in a text editor.
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+``` stata
+sysuse auto, clear
+
+describe                              // 74 observations, 12 variables
+summarize price, detail               // Mean, median (p50) and p90 in the output
+tabulate foreign                      // Share of foreign cars in the Percent column
+count if foreign == 1 & price > 10000
+```
+:::
+
+## Install packages
+
+A large part of the work can be done with base Stata. Historically, user-written packages have been integrated progressively in the main version. Some packages nevertheless have to be installed beforehand. The installation is done once per computer.
+
+``` stata
+ssc install estout, replace         // Tables (Part 2)
+ssc install coefplot, replace       // Coefficient plots (Part 3)
+ssc install blindschemes, replace   // Graph schemes (Part 3)
+ssc install ftools, replace         // Required by reghdfe (Part 4)
+ssc install reghdfe, replace        // High-dimensional fixed effects (Part 4)
+```
+
+To check whether a package is installed, type `which estout`. The command `ssc describe estout` prints its description.
+
+::: {.callout-warning}
+On shared computers, the installed packages may be erased when the session is closed. The installation block is then run at the beginning of each session. It is also part of the master do-file presented in Part 5.
+:::

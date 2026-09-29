@@ -1,0 +1,102 @@
+/*-- scss:defaults --*/
+
+// Custom colours
+$jet: #131516;
+$accent: #e14d17;
+$accent2: #9a2515;
+
+// Fonts
+// Note: Roboto is imported from Google Fonts. If the CDN is blocked on the
+// network in use, comment out the @import line. The default sans-serif font
+// of the system is then used.
+@import url('https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap');
+
+$font-family-sans-serif: "Roboto", sans-serif;
+
+// Bootstrap variables
+$body-color: $jet;
+$link-color: $accent;
+$code-color: $accent2;
+$headings-font-weight: 500;
+
+/*-- scss:rules --*/
+
+// Headings
+h2 {
+  margin-top: 2.2rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid mix($jet, white, 15%);
+}
+
+h3 {
+  color: $accent2;
+}
+
+h4 {
+  color: $accent2;
+  font-style: italic;
+  font-weight: normal;
+}
+
+// Emphasis
+.alert {
+  color: $accent2;
+}
+
+// Code blocks
+div.sourceCode {
+  border-left: 3px solid $accent;
+  border-radius: 2px;
+}
+
+// Tables
+table {
+  font-size: 0.9em;
+}
+
+thead th {
+  border-bottom: 2px solid $jet;
+}
+
+caption {
+  color: #666666;
+  font-variant: small-caps;
+}
+
+// Lists
+ul li::marker {
+  color: mix($accent, white, 70%);
+}
+
+ol li::marker {
+  color: $accent;
+}
+
+// Beamer-style button link
+.button {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.42857143;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  background-color: $accent;
+  border: 1px solid $accent;
+  color: #fff !important;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.button:hover {
+  background-color: $accent2;
+  border-color: $accent2;
+}
+
+.button::before {
+  content: "\25B6";
+  margin-right: 5px;
+}
